@@ -1,0 +1,11 @@
+{
+    "name": "bjorntech/woocommerce-common",
+    "description": "A set of common classes and functions used to develop BjornTech plugins for WooCommerce",
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "BjornTech\\Common\\": "src"
+        }
+    }
+}

@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'bjorntech/accounting-report',
+        'pretty_version' => 'dev-master',
+        'version' => 'dev-master',
+        'reference' => '0472ec097b7997a1c55de49d8fe404d99f7d6624',
+        'type' => 'library',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => false,
+    ),
+    'versions' => array(
+        'automattic/jetpack-autoloader' => array(
+            'pretty_version' => 'v2.12.0',
+            'version' => '2.12.0.0',
+            'reference' => '632b69cfc73ed5505f2b03165e7f68d414d0da12',
+            'type' => 'composer-plugin',
+            'install_path' => __DIR__ . '/../automattic/jetpack-autoloader',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'bjorntech/accounting-report' => array(
+            'pretty_version' => 'dev-master',
+            'version' => 'dev-master',
+            'reference' => '0472ec097b7997a1c55de49d8fe404d99f7d6624',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'bjorntech/woocommerce-common' => array(
+            'pretty_version' => '1.4.6',
+            'version' => '1.4.6.0',
+            'reference' => 'fce4938996070aaba9ee33e543118026e0f844d1',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../bjorntech/woocommerce-common',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);
