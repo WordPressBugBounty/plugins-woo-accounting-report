@@ -4,20 +4,23 @@ namespace BjornTech\AccountingReport\Rest;
 
 defined('ABSPATH') || exit;
 
-use WP_REST_Response;
+use WP_Error;
 use WP_REST_Request;
 
 trait RestControllerTrait
 {
 
-    public function permission_check(WP_REST_REQUEST $request)
+    public function permission_check(WP_REST_Request $request)
     {
-
-        $params = $request->get_json_params();
-
-        if (!wp_verify_nonce($params['nonce'], WC_ACCOUNTING_REPORT_ID)) {
-            return new WP_REST_Response('Not permitted', 403);
+        if (current_user_can('view_woocommerce_reports') || current_user_can('manage_woocommerce')) {
+            return true;
         }
+
+        return new WP_Error(
+            'woocommerce_rest_forbidden',
+            __('Sorry, you are not allowed to access this resource.', 'woo-accounting-report'),
+            array('status' => rest_authorization_required_code())
+        );
 
     }
 

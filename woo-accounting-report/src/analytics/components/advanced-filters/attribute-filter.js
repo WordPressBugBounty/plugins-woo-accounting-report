@@ -59,7 +59,7 @@ const getScreenReaderText = ( {
 	const filterStr = createInterpolateElement(
 		/* eslint-disable-next-line max-len */
 		/* translators: Sentence fragment describing a product attribute match. Example: "Color Is Not Blue" - attribute = Color, equals = Is Not, value = Blue */
-		__( '<attribute/> <equals/> <value/>', 'woocommerce' ),
+		__( '<attribute/> <equals/> <value/>', 'woo-accounting-report' ),
 		{
 			attribute: <Fragment>{ attributeName }</Fragment>,
 			equals: <Fragment>{ rule.label }</Fragment>,
@@ -196,14 +196,14 @@ const AttributeFilter = ( props ) => {
 									type="attributes"
 									placeholder={ __(
 										'Attribute name',
-										'woocommerce'
+										'woo-accounting-report'
 									) }
 									multiple={ false }
 									selected={ selectedAttribute }
 									inlineTags
 									aria-label={ __(
 										'Attribute name',
-										'woocommerce'
+										'woo-accounting-report'
 									) }
 								/>
 							) : (
@@ -219,7 +219,7 @@ const AttributeFilter = ( props ) => {
 											className="woocommerce-filters-advanced__input woocommerce-search"
 											placeholder={ __(
 												'Attribute value',
-												'woocommerce'
+												'woo-accounting-report'
 											) }
 											inlineTags
 											isSearchable

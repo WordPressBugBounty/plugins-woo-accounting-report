@@ -12,8 +12,8 @@ class TotalSales
     public static function render($currencies, $base_currency, $exchange_rates, $tax_classes, $line_item_total, $total_refunds, $fee_total, $line_item_total_tax, $total_refunds_vat, $fee_total_tax, $total_shipping_vat, $total_shipping, $sum_total_items, $sum_total_order)
     {
 
-        Logger::add(print_r($sum_total_order, true));
-        Logger::add(print_r($sum_total_items, true));
+        Logger::add('Sum total order: ' . wp_json_encode($sum_total_order));
+        Logger::add('Sum total items: ' . wp_json_encode($sum_total_items));
         $grand_total_amount = 0;
         $grand_total_vat_amount = 0;
         $grand_sub_total_amount = 0;
@@ -33,40 +33,59 @@ class TotalSales
 
             $include_currencies = count($currencies) !== 1 || $base_currency != $report_currency;
 
-            $exchange_rate = $exchange_rates->{$report_currency};
+            $raw_exchange_rate = isset($exchange_rates->{$report_currency}) ? (float) $exchange_rates->{$report_currency} : 0.0;
+            $exchange_rate = $raw_exchange_rate > 0 ? 1 / $raw_exchange_rate : 0;
 
             foreach ($tax_classes[$report_currency] as $tax_class) {
                 echo '<div class="row">';
                 echo '<table cellspacing="0" cellpadding="2" class="styled-table">';
                 echo '<caption>';
                 if ($base_currency != $report_currency) {
-                    echo sprintf(__('Total sales %s with tax rate %s (%s exchange rate %s)', 'woo-accounting-report'), $report_currency, $tax_class, $base_currency, $exchange_rate);
+                    echo esc_html(sprintf(
+                        /* translators: 1: Report currency, 2: Tax class, 3: Base currency, 4: Exchange rate */
+                        __('Total sales %1$s with tax rate %2$s (%3$s exchange rate %4$s)', 'woo-accounting-report'),
+                        $report_currency,
+                        $tax_class,
+                        $base_currency,
+                        $exchange_rate
+                    ));
                 } else {
-                    echo sprintf(__('Total sales %s with tax rate %s ', 'woo-accounting-report'), $report_currency, $tax_class);
+                    echo esc_html(sprintf(
+                        /* translators: 1: Report currency, 2: Tax class */
+                        __('Total sales %1$s with tax rate %2$s', 'woo-accounting-report'),
+                        $report_currency,
+                        $tax_class
+                    ));
                 }
                 echo '</caption>';
                 echo '<thead>';
                 echo '<th scope="col" style="text-align:left;">';
-                _e('Type', 'woo-accounting-report');
+                esc_html_e('Type', 'woo-accounting-report');
                 echo '</th>';
                 echo '<th scope="col" style="text-align:left;">';
-                echo sprintf(__('Net sales (%s)', 'woo-accounting-report'), $report_currency);
+                /* translators: %s: Currency */
+                echo esc_html(sprintf(__('Net sales (%s)', 'woo-accounting-report'), $report_currency));
                 echo '</th>';
                 echo '<th scope="col" style="text-align:left;">';
-                echo sprintf(__('TAX (%s)', 'woo-accounting-report'), $report_currency);
+                /* translators: %s: Currency */
+                echo esc_html(sprintf(__('TAX (%s)', 'woo-accounting-report'), $report_currency));
                 echo '</th>';
                 echo '<th scope="col" style="text-align:left;">';
-                echo sprintf(__('Total sales (%s)', 'woo-accounting-report'), $report_currency);
+                /* translators: %s: Currency */
+                echo esc_html(sprintf(__('Total sales (%s)', 'woo-accounting-report'), $report_currency));
                 echo '</th>';
                 if ($include_currencies && $base_currency != $report_currency) {
                     echo '<th scope="col" style="text-align:left;">';
-                    _e(sprintf('Net sales (%s)', $base_currency), 'woo-accounting-report');
+                    /* translators: %s: Currency */
+                    echo esc_html(sprintf(__('Net sales (%s)', 'woo-accounting-report'), $base_currency));
                     echo '</th>';
                     echo '<th scope="col" style="text-align:left;">';
-                    _e(sprintf('TAX (%s)', $base_currency), 'woo-accounting-report');
+                    /* translators: %s: Currency */
+                    echo esc_html(sprintf(__('TAX (%s)', 'woo-accounting-report'), $base_currency));
                     echo '</th>';
                     echo '<th scope="col" style="text-align:left;">';
-                    _e(sprintf('Total sales (%s)', $base_currency), 'woo-accounting-report');
+                    /* translators: %s: Currency */
+                    echo esc_html(sprintf(__('Total sales (%s)', 'woo-accounting-report'), $base_currency));
                     echo '</th>';
                 }
                 echo '</thead>';
@@ -107,126 +126,130 @@ class TotalSales
 
                 echo '<tr>';
                 echo '<td align="left">';
-                echo sprintf(__('Sales %s', 'woo-accounting-report'), $tax_class);
+                /* translators: %s: Tax class */
+                echo esc_html(sprintf(__('Sales %s', 'woo-accounting-report'), $tax_class));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($line_item_total_amount);
+                echo esc_html(static::format_number($line_item_total_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($line_item_total_tax_amount);
+                echo esc_html(static::format_number($line_item_total_tax_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($line_item_total_amount + $line_item_total_tax_amount);
+                echo esc_html(static::format_number($line_item_total_amount + $line_item_total_tax_amount));
                 echo '</td>';
                 if ($include_currencies && $base_currency != $report_currency) {
                     echo '<td align="right">';
-                    echo static::format_number($line_item_total_amount * $exchange_rate);
+                    echo esc_html(static::format_number($line_item_total_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($line_item_total_tax_amount * $exchange_rate);
+                    echo esc_html(static::format_number($line_item_total_tax_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number(($line_item_total_amount + $line_item_total_tax_amount) * $exchange_rate);
+                    echo esc_html(static::format_number(($line_item_total_amount + $line_item_total_tax_amount) * $exchange_rate));
                     echo '</td>';
                 }
                 echo '</tr>';
                 echo '<tr>';
                 echo '<td align="left">';
-                echo sprintf(__('Refunds %s', 'woo-accounting-report'), $tax_class);
+                /* translators: %s: Tax class */
+                echo esc_html(sprintf(__('Refunds %s', 'woo-accounting-report'), $tax_class));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_refunds_amount);
+                echo esc_html(static::format_number($total_refunds_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_refunds_vat_amount);
+                echo esc_html(static::format_number($total_refunds_vat_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_refunds_amount + $total_refunds_vat_amount);
+                echo esc_html(static::format_number($total_refunds_amount + $total_refunds_vat_amount));
                 echo '</td>';
                 if ($include_currencies && $base_currency != $report_currency) {
                     echo '<td align="right">';
-                    echo static::format_number($total_refunds_amount * $exchange_rate);
+                    echo esc_html(static::format_number($total_refunds_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($total_refunds_vat_amount * $exchange_rate);
+                    echo esc_html(static::format_number($total_refunds_vat_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number(($total_refunds_amount + $total_refunds_vat_amount) * $exchange_rate);
+                    echo esc_html(static::format_number(($total_refunds_amount + $total_refunds_vat_amount) * $exchange_rate));
                     echo '</td>';
                 }
                 echo '</tr>';
                 echo '<tr>';
                 echo '<td align="left">';
-                echo sprintf(__('Fees %s', 'woo-accounting-report'), $tax_class);
+                /* translators: %s: Tax class */
+                echo esc_html(sprintf(__('Fees %s', 'woo-accounting-report'), $tax_class));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($fee_total_amount);
+                echo esc_html(static::format_number($fee_total_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($fee_total_tax_amount);
+                echo esc_html(static::format_number($fee_total_tax_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($fee_total_amount + $fee_total_tax_amount);
+                echo esc_html(static::format_number($fee_total_amount + $fee_total_tax_amount));
                 echo '</td>';
                 if ($include_currencies && $base_currency != $report_currency) {
                     echo '<td align="right">';
-                    echo static::format_number($fee_total_amount * $exchange_rate);
+                    echo esc_html(static::format_number($fee_total_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($fee_total_tax_amount * $exchange_rate);
+                    echo esc_html(static::format_number($fee_total_tax_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number(($fee_total_amount + $fee_total_tax_amount) * $exchange_rate);
+                    echo esc_html(static::format_number(($fee_total_amount + $fee_total_tax_amount) * $exchange_rate));
                     echo '</td>';
                 }
                 echo '</tr>';
                 echo '<tr>';
                 echo '<td align="left">';
-                echo sprintf(__('Shipping %s', 'woo-accounting-report'), $tax_class);
+                /* translators: %s: Tax class */
+                echo esc_html(sprintf(__('Shipping %s', 'woo-accounting-report'), $tax_class));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_shipping_amount);
+                echo esc_html(static::format_number($total_shipping_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_shipping_vat_amount);
+                echo esc_html(static::format_number($total_shipping_vat_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_shipping_amount + $total_shipping_vat_amount);
+                echo esc_html(static::format_number($total_shipping_amount + $total_shipping_vat_amount));
                 echo '</td>';
                 if ($include_currencies && $base_currency != $report_currency) {
                     echo '<td align="right">';
-                    echo static::format_number($total_shipping_amount * $exchange_rate);
+                    echo esc_html(static::format_number($total_shipping_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($total_shipping_vat_amount * $exchange_rate);
+                    echo esc_html(static::format_number($total_shipping_vat_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number(($total_shipping_amount + $total_shipping_vat_amount) * $exchange_rate);
+                    echo esc_html(static::format_number(($total_shipping_amount + $total_shipping_vat_amount) * $exchange_rate));
                     echo '</td>';
                 }
                 echo '</tr>';
                 echo '<tr class="subtotal-row">';
                 echo '<td align="left">';
-                echo sprintf(__('Total sales incl shipping and charged fees ', 'woo-accounting-report'), $tax_class);
+                echo esc_html(__('Total sales incl shipping and charged fees', 'woo-accounting-report'));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($sub_total_amount);
+                echo esc_html(static::format_number($sub_total_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_vat_amount);
+                echo esc_html(static::format_number($total_vat_amount));
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($total_amount);
+                echo esc_html(static::format_number($total_amount));
                 echo '</td>';
                 if ($include_currencies && $base_currency != $report_currency) {
                     echo '<td align="right">';
-                    echo static::format_number($sub_total_amount * $exchange_rate);
+                    echo esc_html(static::format_number($sub_total_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($total_vat_amount * $exchange_rate);
+                    echo esc_html(static::format_number($total_vat_amount * $exchange_rate));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($sub_total_currency_amount);
+                    echo esc_html(static::format_number($sub_total_currency_amount));
                     echo '</td>';
                 }
                 echo '</tr>';
@@ -239,4 +262,3 @@ class TotalSales
 
     }
 }
-

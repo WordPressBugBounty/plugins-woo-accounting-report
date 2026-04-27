@@ -18,8 +18,8 @@ import {
 	textContent,
 } from './utils';
 
-const dateStringFormat = __( 'MMM D, YYYY', 'woocommerce' );
-const dateFormat = __( 'MM/DD/YYYY', 'woocommerce' );
+const dateStringFormat = __( 'MMM D, YYYY', 'woo-accounting-report' );
+const dateFormat = __( 'MM/DD/YYYY', 'woo-accounting-report' );
 
 class DateFilter extends Component {
 	constructor( { filter } ) {
@@ -50,7 +50,7 @@ class DateFilter extends Component {
 		return _x(
 			'<after/><span> and </span><before/>',
 			'Date range inputs arranged on a single line',
-			'woocommerce'
+			'woo-accounting-report'
 		);
 	}
 

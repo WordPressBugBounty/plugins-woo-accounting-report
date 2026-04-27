@@ -42,7 +42,7 @@ const completer: AutoCompleter = {
 				{ interpolateComponents( {
 					mixedString: __(
 						'All products with titles that include {{query /}}',
-						'woocommerce'
+						'woo-accounting-report'
 					),
 					components: {
 						query: (

@@ -401,7 +401,7 @@ class Control extends Component< Props, State > {
 						>
 							{ __(
 								'Move backward for selected items',
-								'woocommerce'
+								'woo-accounting-report'
 							) }
 						</span>
 					) }

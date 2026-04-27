@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 import {
     useEffect,
@@ -179,10 +179,17 @@ export const TotalSalesTable = (props) => {
             let title;
             let taxString;
             if (cardItem.key.startsWith('combined_')) {
-                title = __(`Total sales in ${cardItem.currency}`, 'woo-accounting-report');
+                title = sprintf(
+                    __('Total sales in %s', 'woo-accounting-report'),
+                    cardItem.currency
+                );
                 taxString = 'all';
             } else {
-                title = __(`Total sales in ${cardItem.currency} with ${cardItem.taxRateCodeString}% tax`, 'woo-accounting-report');
+                title = sprintf(
+                    __('Total sales in %1$s with %2$s%% tax', 'woo-accounting-report'),
+                    cardItem.currency,
+                    cardItem.taxRateCodeString
+                );
                 taxString = cardItem.taxRateCodeString;
             }
 
@@ -234,7 +241,7 @@ export const TotalSalesTable = (props) => {
     const NoDataElement = (
         <TableCard
             key={0}
-            title={__(`Total sales`, 'woo-accounting-report')}
+            title={__('Total sales', 'woo-accounting-report')}
             headers={headers}
             rows={[]}
             rowsPerPage={1}
@@ -249,4 +256,3 @@ export const TotalSalesTable = (props) => {
 
 
 }
-

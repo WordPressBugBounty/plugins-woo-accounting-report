@@ -16,22 +16,22 @@ class MethodsOfPayment
         echo '<table cellspacing="0" cellpadding="2" class="styled-table">';
 
         echo '<caption>';
-        echo __('Methods of payment', 'woo-accounting-report');
+        echo esc_html__('Methods of payment', 'woo-accounting-report');
         echo '</caption>';
 
         echo '<thead>';
         echo '<tr>';
         echo '<th scope="col" style="text-align:left;">';
-        echo __('Payment method', 'woo-accounting-report');
+        echo esc_html__('Payment method', 'woo-accounting-report');
         echo '</th>';
         echo '<th scope="col" style="text-align:right">';
-        echo __('Currency', 'woo-accounting-report');
+        echo esc_html__('Currency', 'woo-accounting-report');
         echo '</th>';
         echo '<th scope="col" style="text-align:right;">';
-        echo __('Amount', 'woo-accounting-report');
+        echo esc_html__('Amount', 'woo-accounting-report');
         echo '</th>';
         echo '<th scope="col" style="text-align:right;">';
-        echo __('Fee', 'woo-accounting-report');
+        echo esc_html__('Fee', 'woo-accounting-report');
         echo '</th>';
         echo '</tr>';
         echo '</thead>';
@@ -43,17 +43,17 @@ class MethodsOfPayment
 
                 echo '<tr>';
                 echo '<td>';
-                echo empty($payment_method_titles[$payment_method]) ? str_replace('_', ' ', ucfirst($payment_method)) : $payment_method_titles[$payment_method];
+                echo esc_html(empty($payment_method_titles[$payment_method]) ? str_replace('_', ' ', ucfirst($payment_method)) : $payment_method_titles[$payment_method]);
                 echo '</td>';
                 echo '<td>';
-                echo $currency_key;
+                echo esc_html($currency_key);
                 echo '</td>';
                 echo '<td align="right">';
-                echo static::format_number($order_currency);
+                echo esc_html(static::format_number($order_currency));
                 echo '</td>';
                 if ($payment_method == 'stripe') {
                     echo '<td align="right">';
-                    echo static::format_number($stripe_fees);
+                    echo esc_html(static::format_number($stripe_fees));
                     echo '</td>';
                 } else {
                     echo '<td>';

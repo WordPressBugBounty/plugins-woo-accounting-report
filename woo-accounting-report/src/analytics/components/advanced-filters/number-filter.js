@@ -22,7 +22,7 @@ class NumberFilter extends Component {
 		return _x(
 			'<rangeStart/><span> and </span><rangeEnd/>',
 			'Numerical range inputs arranged on a single line',
-			'woocommerce'
+			'woo-accounting-report'
 		);
 	}
 
@@ -145,14 +145,14 @@ class NumberFilter extends Component {
 			labelFormat = _x(
 				'%(field)s maximum amount',
 				'maximum value input',
-				'woocommerce'
+				'woo-accounting-report'
 			);
 		} else {
 			/* translators: Sentence fragment, "minimum amount" refers to a numeric value the field must be more than. Screenshot for context: https://cloudup.com/cmv5CLyMPNQ */
 			labelFormat = _x(
 				'%(field)s minimum amount',
 				'minimum value input',
-				'woocommerce'
+				'woo-accounting-report'
 			);
 		}
 
@@ -197,7 +197,7 @@ class NumberFilter extends Component {
 				value: rangeStart || '',
 				label: sprintf(
 					/* translators: Sentence fragment, "range start" refers to the first of two numeric values the field must be between. Screenshot for context: https://cloudup.com/cmv5CLyMPNQ */
-					__( '%(field)s range start', 'woocommerce' ),
+					__( '%(field)s range start', 'woo-accounting-report' ),
 					{ field: get( config, [ 'labels', 'add' ] ) }
 				),
 				onChange: rangeStartOnChange,
@@ -209,7 +209,7 @@ class NumberFilter extends Component {
 				value: rangeEnd || '',
 				label: sprintf(
 					/* translators: Sentence fragment, "range end" refers to the second of two numeric values the field must be between. Screenshot for context: https://cloudup.com/cmv5CLyMPNQ */
-					__( '%(field)s range end', 'woocommerce' ),
+					__( '%(field)s range end', 'woo-accounting-report' ),
 					{ field: get( config, [ 'labels', 'add' ] ) }
 				),
 				onChange: rangeEndOnChange,

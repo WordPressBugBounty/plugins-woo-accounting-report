@@ -14,7 +14,7 @@ import classnames from 'classnames';
 import DatePickerContent from './content';
 import DropdownButton from '../dropdown-button';
 
-const shortDateFormat = __( 'MM/DD/YYYY', 'woocommerce' );
+const shortDateFormat = __( 'MM/DD/YYYY', 'woo-accounting-report' );
 
 /**
  * Select a range of dates or single dates.
@@ -139,7 +139,7 @@ class DateRangeFilterPicker extends Component {
 		return (
 			<div className="woocommerce-filters-filter">
 				<span className="woocommerce-filters-label">
-					{ __( 'Date range', 'woocommerce' ) }:
+					{ __( 'Date range', 'woo-accounting-report' ) }:
 				</span>
 				<Dropdown
 					contentClassName={ contentClasses }

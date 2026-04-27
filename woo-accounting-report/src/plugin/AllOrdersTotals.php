@@ -21,7 +21,7 @@ class AllOrdersTotals
 
         echo '<table cellspacing="0" cellpadding="2" class="styled-table">';
 
-        echo '<caption>' . __('All orders', 'woo-accounting-report') . '</caption>';
+        echo '<caption>' . esc_html__('All orders', 'woo-accounting-report') . '</caption>';
 
         $grand_total_ex_vat = 0;
         $grand_total_vat = 0;
@@ -38,21 +38,21 @@ class AllOrdersTotals
                     echo '<thead>';
                     echo '<tr>';
 
-                    echo '<th scope="col" style="text-align:left;">' . __('Order date', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Order number', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Id', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Buyer name', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Country', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Payment method', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Stripe fee', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Currency', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Value ex. TAX', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('TAX', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('TAX rate', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Shipping', 'woo-accounting-report') . '</th>';
-                    echo '<th scope="col" style="text-align:left;">' . __('Total amount', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Order date', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Order number', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Id', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Buyer name', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Country', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Payment method', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Stripe fee', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Currency', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Value ex. TAX', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('TAX', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('TAX rate', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Shipping', 'woo-accounting-report') . '</th>';
+                    echo '<th scope="col" style="text-align:left;">' . esc_html__('Total amount', 'woo-accounting-report') . '</th>';
                     if ($eu_tax_used) {
-                        echo '<th scope="col" style="text-align:left;">' . __('EU Corporate VAT number', 'woo-accounting-report') . '</th>';
+                        echo '<th scope="col" style="text-align:left;">' . esc_html__('EU Corporate VAT number', 'woo-accounting-report') . '</th>';
                     }
                     echo '</tr>';
                     echo '</thead>';
@@ -73,28 +73,28 @@ class AllOrdersTotals
 
                             echo '<tr>';
 
-                            echo '<td>' . substr($order['date_modified'], 0, 10) . '</td>';
-                            echo '<td>' . $order['number'] . '</td>';
-                            echo '<td>' . $order['id'] . '</td>';
-                            echo '<td>' . $order['customer_name'] . '</td>';
-                            echo '<td>' . $order['country'] . '</td>';
+                            echo '<td>' . esc_html(substr($order['date_modified'], 0, 10)) . '</td>';
+                            echo '<td>' . esc_html($order['number']) . '</td>';
+                            echo '<td>' . esc_html($order['id']) . '</td>';
+                            echo '<td>' . esc_html($order['customer_name']) . '</td>';
+                            echo '<td>' . esc_html($order['country']) . '</td>';
 
                             echo '<td>';
-                            echo empty($payment_method_titles[$order['payment_method']])
+                            echo esc_html(empty($payment_method_titles[$order['payment_method']])
                                 ? str_replace('_', ' ', ucfirst($order['payment_method']))
-                                : $payment_method_titles[$order['payment_method']];
+                                : $payment_method_titles[$order['payment_method']]);
                             echo '</td>';
 
-                            echo '<td align="right">' . static::format_number($order['stripe_fee']) . '</td>';
-                            echo '<td>' . $order['currency'] . '</td>';
-                            echo '<td align="right">' . static::format_number($order['value'] - $order['tax_value']) . '</td>';
-                            echo '<td align="right">' . static::format_number($order['tax_value']) . '</td>';
-                            echo '<td align="right">' . $order['tax_rates'] . '</td>';
-                            echo '<td align="right">' . static::format_number($order['shipping']) . '</td>';
-                            echo '<td align="right">' . static::format_number($order['value']) . '</td>';
+                            echo '<td align="right">' . esc_html(static::format_number($order['stripe_fee'])) . '</td>';
+                            echo '<td>' . esc_html($order['currency']) . '</td>';
+                            echo '<td align="right">' . esc_html(static::format_number($order['value'] - $order['tax_value'])) . '</td>';
+                            echo '<td align="right">' . esc_html(static::format_number($order['tax_value'])) . '</td>';
+                            echo '<td align="right">' . esc_html($order['tax_rates']) . '</td>';
+                            echo '<td align="right">' . esc_html(static::format_number($order['shipping'])) . '</td>';
+                            echo '<td align="right">' . esc_html(static::format_number($order['value'])) . '</td>';
 
                             if ($eu_tax_used) {
-                                echo '<td>' . $order['customer_vat_number'] . '</td>';
+                                echo '<td>' . esc_html($order['customer_vat_number']) . '</td>';
                             }
                             echo '</tr>';
                         }
@@ -112,30 +112,35 @@ class AllOrdersTotals
                     echo '<td></td>';
                     echo '<td>';
                     if ($base_currency != $report_currency) {
-                        echo sprintf(
-                            __('Total %s (%s exchange rate %s)', 'woo-accounting-report'),
+                        echo esc_html(sprintf(
+                            /* translators: 1: Country, 2: Report currency, 3: Exchange rate */
+                            __('Total %1$s (%2$s exchange rate %3$s)', 'woo-accounting-report'),
                             $country,
                             $report_currency,
                             $exchange_rate
-                        );
+                        ));
                     } else {
-                        echo sprintf(__('Total %s', 'woo-accounting-report'), $country);
+                        echo esc_html(sprintf(
+                            /* translators: %s: Country */
+                            __('Total %s', 'woo-accounting-report'),
+                            $country
+                        ));
                     }
                     echo '</td>';
                     echo '<td></td>';
                     echo '<td></td>';
                     echo '<td align="right">';
-                    echo static::format_number($total_ex_vat);
+                    echo esc_html(static::format_number($total_ex_vat));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($total_vat);
+                    echo esc_html(static::format_number($total_vat));
                     echo '</td>';
                     echo '<td></td>';
                     echo '<td align="right">';
-                    echo static::format_number($total_shipping);
+                    echo esc_html(static::format_number($total_shipping));
                     echo '</td>';
                     echo '<td align="right">';
-                    echo static::format_number($total);
+                    echo esc_html(static::format_number($total));
                     echo '</td>';
                     echo '<td></td>';
                     echo '</tr>';
@@ -148,22 +153,26 @@ class AllOrdersTotals
             echo '<td></td>';
             echo '<td></td>';
             echo '<td>';
-            echo sprintf(__('Grand Total %s', 'woo-accounting-report'), $base_currency);
+            echo esc_html(sprintf(
+                /* translators: %s: Base currency */
+                __('Grand Total %s', 'woo-accounting-report'),
+                $base_currency
+            ));
             echo '</td>';
             echo '<td></td>';
             echo '<td></td>';
             echo '<td align="right">';
-            echo static::format_number($grand_total_ex_vat);
+            echo esc_html(static::format_number($grand_total_ex_vat));
             echo '</td>';
             echo '<td align="right">';
-            echo static::format_number($grand_total_vat);
+            echo esc_html(static::format_number($grand_total_vat));
             echo '</td>';
             echo '<td></td>';
             echo '<td align="right">';
-            echo static::format_number($grand_total_shipping);
+            echo esc_html(static::format_number($grand_total_shipping));
             echo '</td>';
             echo '<td align="right">';
-            echo static::format_number($grand_total);
+            echo esc_html(static::format_number($grand_total));
             echo '</td>';
             echo '<td></td>';
             echo '</tr>';
@@ -173,4 +182,3 @@ class AllOrdersTotals
         echo '</div>';
     }
 }
-

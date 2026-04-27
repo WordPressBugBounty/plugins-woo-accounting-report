@@ -42,7 +42,7 @@ export function getAdminSetting(
 		throw new Error(
 			__(
 				'Mutable settings should be accessed via data store.',
-				'woocommerce'
+				'woo-accounting-report'
 			)
 		);
 	}
@@ -80,7 +80,7 @@ export function setAdminSetting( name, value, filter = ( val ) => val ) {
 		throw new Error(
 			__(
 				'Mutable settings should be mutated via data store.',
-				'woocommerce'
+				'woo-accounting-report'
 			)
 		);
 	}

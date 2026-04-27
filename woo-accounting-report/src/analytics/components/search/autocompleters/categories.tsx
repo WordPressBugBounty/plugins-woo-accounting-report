@@ -41,7 +41,7 @@ const completer: AutoCompleter = {
 				{ interpolateComponents( {
 					mixedString: __(
 						'All categories with titles that include {{query /}}',
-						'woocommerce'
+						'woo-accounting-report'
 					),
 					components: {
 						query: (

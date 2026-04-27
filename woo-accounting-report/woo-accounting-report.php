@@ -1,50 +1,64 @@
 <?php
 
 /*
-The main plugin file for WooCommerce Accounting Report.
+The main plugin file for BjornTech Accounting Report for WooCommerce.
 
 Generates an accounting report from WooCommerce
 
 @package   BjornTech\AccountingReport
-@author    BjornTech <info@bjorntech.com>
+@author    BjornTech <hello@bjorntech.com>
 @license   GPL-3.0
 @link      https://bjorntech.com
-@copyright 2018-2023 BjornTech AB
+@copyright 2018-2026 BjornTech AB
 
 @wordpress-plugin
-Plugin Name:       WooCommerce Accounting Report
-Plugin URI:        https://www.bjorntech.se/accountingreport
-Description:       Generates Accounting reports
-Version:           3.1.1
+Plugin Name:       BjornTech Accounting Report for WooCommerce
+Plugin URI:        https://bjorntech.com/
+Description:       Generates accounting reports from WooCommerce orders, with sales, taxes, refunds, and OSS data ready for your accountant.
+Version:           4.0.1
 Author:            BjornTech
-Author URI:        https://bjorntech.se
+Author URI:        https://bjorntech.com
 Text Domain:       woo-accounting-report
-Domain Path:       /languages
+Requires Plugins:  woocommerce
 
 WC requires at least: 4.0
-WC tested up to: 9.1
 Requires at least: 4.9
-Tested up to: 6.6
 Requires PHP: 7.4
 
-Copyright:         2018-2024 BjornTech AB
+Copyright:         2018-2026 BjornTech AB
 License:           GNU General Public License v3.0
-License URI:       http://www.gnu.org/licenses/gpl-3.0.html
+License URI:       https://www.gnu.org/licenses/gpl-3.0.html
 */
 
 namespace BjornTech\AccountingReport;
 
 defined('ABSPATH') || exit;
 
-require __DIR__ . '/vendor/autoload_packages.php';
-
-use BjornTech\Common\SingletonTrait;
 use BjornTech\AccountingReport\Rest\RestHandler;
 
-define('WC_ACCOUNTING_REPORT_VERSION', '3.0.3');
+spl_autoload_register(function ($class_name) {
+    $prefix = __NAMESPACE__ . '\\';
+
+    if (0 !== strpos($class_name, $prefix)) {
+        return;
+    }
+
+    $relative_class = substr($class_name, strlen($prefix));
+    $file = __DIR__ . '/src/plugin/' . str_replace('\\', '/', $relative_class) . '.php';
+
+    if (file_exists($file)) {
+        require $file;
+    }
+});
+
+define('WC_ACCOUNTING_REPORT_VERSION', '4.0.1');
 define('WC_ACCOUNTING_REPORT_HANDLE', 'woo_accounting_report');
 define('WC_ACCOUNTING_REPORT_SLUG', 'woo-accounting-report');
 define('WC_ACCOUNTING_REPORT_ID', 'wcar');
+
+if (!defined('BJORNTECH_ACCOUNTING_EXCHANGE_RATES_API_KEY')) {
+    define('BJORNTECH_ACCOUNTING_EXCHANGE_RATES_API_KEY', 'bt_live_plugin_free_data_key');
+}
 
 /**
  *    WC_Accounting_Report
@@ -53,7 +67,7 @@ define('WC_ACCOUNTING_REPORT_ID', 'wcar');
 class MainPluginClass
 {
 
-    use SingletonTrait;
+    use AccountingReportSingletonTrait;
 
     public $version = WC_ACCOUNTING_REPORT_VERSION;
     public $handle = WC_ACCOUNTING_REPORT_HANDLE;
@@ -81,7 +95,9 @@ class MainPluginClass
             }
         });
 
-        load_plugin_textdomain($this->slug, false, dirname(plugin_basename(__FILE__)) . '/languages');
+        // Translations are loaded automatically by WordPress.org since WP 4.6.
+        // Calling load_plugin_textdomain() before the `init` hook would also trigger
+        // the WP 6.7+ "translation loading triggered too early" notice.
 
         add_action('admin_enqueue_scripts', array($this, 'admin_add_styles_and_scripts'));
         add_action('admin_enqueue_scripts', array($this, 'add_accounting_report_script'));
@@ -95,9 +111,7 @@ class MainPluginClass
             return;
         }
 
-        if ('yes' === get_option('wcar_load_analytics','yes')) {
-            add_filter('woocommerce_analytics_report_menu_items', array($this, 'add_woo_accounting_report_to_analytics_menu'));
-        }
+        add_filter('woocommerce_analytics_report_menu_items', array($this, 'add_woo_accounting_report_to_analytics_menu'));
 
         Settings::init();
 
@@ -112,6 +126,7 @@ class MainPluginClass
             'general',
             'bjorntech_wcar_include_order_statuses',
             [
+                'sanitize_callback' => array($this, 'sanitize_order_statuses'),
                 'show_in_rest' => array(
                     'schema' => array(
                         'type' => 'array',
@@ -121,7 +136,7 @@ class MainPluginClass
                     ),
                 ),
                 'default' => ['wc-completed'],
-                'type' => 'object',
+                'type' => 'array',
             ]
         );
         register_setting(
@@ -131,6 +146,7 @@ class MainPluginClass
                 'default' => 'date_paid',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_report_date_field'),
             ]
         );
         register_setting(
@@ -140,6 +156,7 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_yes_no_setting'),
             ]
         );
         register_setting(
@@ -149,6 +166,7 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_yes_no_setting'),
             ]
         );
         register_setting(
@@ -158,6 +176,7 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
             ]
         );
         register_setting(
@@ -167,15 +186,17 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_yes_no_setting'),
             ]
         );
         register_setting(
             'general',
-            'wcar_load_analytics',
+            'bjorntech_wcar_present_local_currency',
             [
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_yes_no_setting'),
             ]
         );
         register_setting(
@@ -185,6 +206,7 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_yes_no_setting'),
             ]
         );
         register_setting(
@@ -194,6 +216,7 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_decimal_count'),
             ]
         );
         register_setting(
@@ -203,6 +226,7 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_separator_setting'),
             ]
         );
         register_setting(
@@ -212,6 +236,17 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_separator_setting'),
+            ]
+        );
+        register_setting(
+            'general',
+            'bjorntech_wcar_exchange_rates_api_key',
+            [
+                'default' => '',
+                'show_in_rest' => false,
+                'type' => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
             ]
         );
         register_setting(
@@ -221,9 +256,56 @@ class MainPluginClass
                 'default' => '',
                 'show_in_rest' => true,
                 'type' => 'string',
+                'sanitize_callback' => array($this, 'sanitize_country_setting'),
             ]
         );
 
+    }
+
+    public function sanitize_order_statuses($value)
+    {
+        $statuses = is_array($value) ? $value : array($value);
+        $allowed_statuses = array_keys(wc_get_order_statuses());
+        $statuses = array_filter(array_map('sanitize_text_field', $statuses));
+        $statuses = array_values(array_intersect($statuses, $allowed_statuses));
+
+        return empty($statuses) ? array('wc-completed') : $statuses;
+    }
+
+    public function sanitize_report_date_field($value)
+    {
+        $allowed_values = array('date_completed', 'date_paid', 'date_created');
+        $value = sanitize_text_field((string) $value);
+
+        return in_array($value, $allowed_values, true) ? $value : 'date_paid';
+    }
+
+    public function sanitize_yes_no_setting($value)
+    {
+        return 'yes' === $value ? 'yes' : '';
+    }
+
+    public function sanitize_decimal_count($value)
+    {
+        return (string) max(0, absint($value));
+    }
+
+    public function sanitize_separator_setting($value)
+    {
+        $value = sanitize_text_field((string) $value);
+
+        if ('SPACE' === strtoupper($value)) {
+            return 'SPACE';
+        }
+
+        return substr($value, 0, 1);
+    }
+
+    public function sanitize_country_setting($value)
+    {
+        $value = strtoupper(sanitize_text_field((string) $value));
+
+        return preg_match('/^[A-Z]{2}(:[A-Z]{2})?$/', $value) ? $value : '';
     }
 
     public function add_report_to_menu($reports)
@@ -288,6 +370,16 @@ class MainPluginClass
     public function process_report($name)
     {
 
+        $analytics_url = admin_url('admin.php?page=wc-admin&path=%2Fanalytics%2Fwoo-accounting-report');
+
+        echo '<div class="notice notice-warning inline"><p><strong>' .
+            esc_html__('Deprecated report:', 'woo-accounting-report') .
+            '</strong> ' .
+            esc_html__('This legacy accounting report is deprecated. Please use the new Analytics Accounting report instead.', 'woo-accounting-report') .
+            ' <a href="' . esc_url($analytics_url) . '">' .
+            esc_html__('Open Analytics Accounting report', 'woo-accounting-report') .
+            '</a>.</p></div>';
+
         $report = new AccountingReport();
         $report->process_report($name != 'total-report' ? array($name) : array());
 
@@ -297,7 +389,7 @@ class MainPluginClass
     {
         $links = array_merge(
             array(
-                '<a href="' . admin_url('admin.php?page=wc-settings&tab=accounting_report') . '">' . __('Settings', 'woo-accounting-report') . '</a>',
+                '<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=woo_accounting_report')) . '">' . esc_html__('Settings', 'woo-accounting-report') . '</a>',
             ),
             $links
         );

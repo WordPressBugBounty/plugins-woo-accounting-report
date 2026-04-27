@@ -2,7 +2,7 @@
   "name": "woo-accounting-report",
   "title": "woo-accounting-report",
   "license": "GPL-3.0-or-later",
-  "version": "3.0.2",
+  "version": "4.0.1",
   "description": "woo-accounting-report",
   "scripts": {
     "build": "wp-scripts build",
@@ -15,24 +15,29 @@
     "lint:md:js": "wp-scripts lint-md-js",
     "lint:pkg-json": "wp-scripts lint-pkg-json",
     "packages-update": "wp-scripts packages-update",
+    "packages-update:wp-6.6": "wp-scripts packages-update --dist-tag=wp-6.6",
+    "packages-update:wp-6.9": "wp-scripts packages-update --dist-tag=wp-6.9",
+    "packages-update:latest": "wp-scripts packages-update --dist-tag=latest",
     "start": "wp-scripts start",
     "plugin-zip": "wp-scripts plugin-zip",
     "test:e2e": "wp-scripts test-e2e",
     "test:unit": "wp-scripts test-unit-js",
-    "composer": "composer install --no-dev --prefer-dist --no-scripts --no-progress --no-suggest --optimize-autoloader",
-    "release": "bun install && bun run build && bun run composer && bun run plugin-zip",
+    "release": "bun install && bun run build && bun run plugin-zip",
     "instawp": "bun install && bun run build"
   },
   "devDependencies": {
-    "@woocommerce/dependency-extraction-webpack-plugin": "^3.0.1",
-    "@woocommerce/eslint-plugin": "^2.3.0",
-    "@wordpress/scripts": "^29.0.0"
+    "@woocommerce/dependency-extraction-webpack-plugin": "3.0.1",
+    "@woocommerce/eslint-plugin": "2.3.0",
+    "@wordpress/scripts": "29.0.0"
   },
   "files": [
+    "LICENSE",
     "assets",
     "build",
-    "src",
-    "vendor",
+    "readme.txt",
+    "src/analytics",
+    "src/plugin",
+    "src/report",
     "uninstall.php",
     "woo-accounting-report.php"
   ],

@@ -12,11 +12,14 @@ use WC_Admin_Report;
 use WC_Countries;
 use WC_Order;
 use WC_Tax;
+use WP_Error;
 
 defined('ABSPATH') || exit;
 
 class AccountingReport extends WC_Admin_Report
 {
+
+    private const EXCHANGE_RATE_ENDPOINT = 'https://accounting.services.bjorntech.eu/latest';
 
     static $order_differences = array();
     static $sales_per_region = array();
@@ -52,13 +55,17 @@ class AccountingReport extends WC_Admin_Report
      */
     public function get_export_button()
     {
+        if (!current_user_can('view_woocommerce_reports')) {
+            return;
+        }
 
-        $current_range = !empty($_GET['range']) ? sanitize_text_field($_GET['range']) : 'last_month';
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only report navigation parameter; state-changing actions are protected by check_current_range_nonce().
+        $current_range = !empty($_GET['range']) ? sanitize_text_field(wp_unslash($_GET['range'])) : 'last_month';
 ?>
         <a href="#"
-            download="report-<?php echo esc_attr($current_range); ?>-<?php echo date_i18n('Y-m-d', current_time('timestamp')); ?>.csv"
+            download="report-<?php echo esc_attr($current_range); ?>-<?php echo esc_attr(date_i18n('Y-m-d', current_time('timestamp'))); ?>.csv"
             class="export_csv" data-export="table">
-            <?php _e('Export CSV', 'woocommerce'); ?>
+            <?php esc_html_e('Export CSV', 'woo-accounting-report'); ?>
         </a>
 <?php
     }
@@ -68,16 +75,20 @@ class AccountingReport extends WC_Admin_Report
      */
     public function process_report($report_type = array())
     {
+        if (!current_user_can('view_woocommerce_reports')) {
+            wp_die(esc_html__('You do not have permission to view accounting reports.', 'woo-accounting-report'));
+        }
 
         self::$report_type = $report_type;
 
         $ranges = array(
-            'year' => __('Year', 'woocommerce'),
-            'last_month' => __('Last month', 'woocommerce'),
-            'month' => __('This month', 'woocommerce'),
+            'year' => __('Year', 'woo-accounting-report'),
+            'last_month' => __('Last month', 'woo-accounting-report'),
+            'month' => __('This month', 'woo-accounting-report'),
         );
 
-        $current_range = !empty($_GET['range']) ? sanitize_text_field($_GET['range']) : 'last_month';
+        // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- Read-only report navigation parameter; state-changing actions are protected by check_current_range_nonce().
+        $current_range = !empty($_GET['range']) ? sanitize_text_field(wp_unslash($_GET['range'])) : 'last_month';
 
         if (!in_array($current_range, array('custom', 'year', 'last_month', 'month', '7day'))) {
             $current_range = 'last_month';
@@ -258,22 +269,109 @@ class AccountingReport extends WC_Admin_Report
 
     public function get_exchage_rates($base = false)
     {
+        $api_key = $this->get_exchange_rate_api_key();
 
-        $args = ($base ? '?base=' . $base : '');
+        if ('' === $api_key) {
+            Logger::add('Exchange rate API key missing. Configure bjorntech_wcar_exchange_rates_api_key or BJORNTECH_ACCOUNTING_EXCHANGE_RATES_API_KEY.');
+            return new WP_Error(
+                'woocommerce_rest_exchange_rates_missing_api_key',
+                __('Exchange rate API key is missing.', 'woo-accounting-report')
+            );
+        }
 
-        $response = wp_remote_get('https://accounting.bjorntech.net/v1/exchange-rates' . $args);
+        $query_args = array(
+            'access_key' => $api_key,
+        );
+
+        if ($base) {
+            $query_args['base'] = sanitize_text_field($base);
+        }
+
+        $response = wp_remote_get(
+            add_query_arg($query_args, self::EXCHANGE_RATE_ENDPOINT),
+            array('timeout' => 20)
+        );
 
         if (is_wp_error($response)) {
-            Logger::add(print_r($response, true));
-            return false;
-        } else {
-            if (($http_code = wp_remote_retrieve_response_code($response)) != 200) {
-                Logger::add(print_r($http_code, true));
-                return false;
-            }
-            $body = wp_remote_retrieve_body($response);
-            return json_decode($body);
+            Logger::add('Exchange rate response error: ' . $response->get_error_message());
+            return new WP_Error(
+                'woocommerce_rest_exchange_rates_request_failed',
+                $response->get_error_message()
+            );
         }
+
+        $http_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        $decoded = json_decode($body);
+
+        if (200 !== $http_code || !is_object($decoded)) {
+            Logger::add('Exchange rate HTTP code: ' . wp_json_encode($http_code));
+            Logger::add('Exchange rate response body: ' . wp_json_encode($body));
+
+            return new WP_Error(
+                'woocommerce_rest_exchange_rates_invalid_response',
+                __('Exchange rate service returned an invalid response.', 'woo-accounting-report')
+            );
+        }
+
+        if (isset($decoded->success) && false === $decoded->success) {
+            Logger::add('Exchange rate API error: ' . wp_json_encode($decoded));
+
+            $message = isset($decoded->error->message)
+                ? $decoded->error->message
+                : __('Exchange rate service reported an error.', 'woo-accounting-report');
+
+            return new WP_Error(
+                'woocommerce_rest_exchange_rates_api_error',
+                $message
+            );
+        }
+
+        if (!isset($decoded->rates) || !is_object($decoded->rates)) {
+            return new WP_Error(
+                'woocommerce_rest_exchange_rates_missing_rates',
+                __('Exchange rate response did not include rates.', 'woo-accounting-report')
+            );
+        }
+
+        foreach (self::$site_currencies as $currency_code) {
+            if (!isset($decoded->rates->{$currency_code})) {
+                return new WP_Error(
+                    'woocommerce_rest_exchange_rates_missing_currency',
+                    sprintf(
+                        /* translators: %s: Currency code */
+                        __('Exchange rate for currency %s is missing.', 'woo-accounting-report'),
+                        $currency_code
+                    )
+                );
+            }
+        }
+
+        if ($base && !isset($decoded->rates->{$base})) {
+            return new WP_Error(
+                'woocommerce_rest_exchange_rates_missing_base_currency',
+                sprintf(
+                    /* translators: %s: Base currency code */
+                    __('Exchange rate for base currency %s is missing.', 'woo-accounting-report'),
+                    $base
+                )
+            );
+        }
+
+        return $decoded;
+    }
+
+    private function get_exchange_rate_api_key()
+    {
+        $api_key = defined('BJORNTECH_ACCOUNTING_EXCHANGE_RATES_API_KEY')
+            ? BJORNTECH_ACCOUNTING_EXCHANGE_RATES_API_KEY
+            : '';
+
+        if ('' === $api_key) {
+            $api_key = get_option('bjorntech_wcar_exchange_rates_api_key', '');
+        }
+
+        return is_string($api_key) ? trim($api_key) : '';
     }
 
     public function get_val($value_array, $value_key)
@@ -291,14 +389,18 @@ class AccountingReport extends WC_Admin_Report
         $sort_criteria = '';
         $base_currency = get_woocommerce_currency();
 
-        if ($timezone_string = get_option('timezone_string')) {
-            date_default_timezone_set($timezone_string);
-        }
-
         $my_country = WC()->countries->get_base_country();
         $only_local = get_option('bjorntech_wcar_force_local') === 'yes';
-        $from_timestamp = strtotime(date('Y-m-d 00:00:01', $this->start_date));
-        $to_timestamp = strtotime(date('Y-m-d 23:59:59', $this->end_date));
+        $timezone = function_exists('wp_timezone') ? wp_timezone() : new \DateTimeZone(get_option('timezone_string', 'UTC'));
+        $from_date = new \DateTime('now', $timezone);
+        $from_date->setTimestamp($this->start_date);
+        $from_date->setTime(0, 0, 1);
+        $from_timestamp = $from_date->getTimestamp();
+
+        $to_date = new \DateTime('now', $timezone);
+        $to_date->setTimestamp($this->end_date);
+        $to_date->setTime(23, 59, 59);
+        $to_timestamp = $to_date->getTimestamp();
         $period = $from_timestamp . '...' . $to_timestamp;
         $base_on_status = get_option('bjorntech_wcar_on_status', 'date_completed');
 
@@ -308,7 +410,7 @@ class AccountingReport extends WC_Admin_Report
             'status' => get_option('bjorntech_wcar_include_order_statuses', ['wc-completed']),
         );
 
-        Logger::add('get_order_params: ' . print_r($shop_order_params, true));
+        Logger::add('Order params: ' . wp_json_encode($shop_order_params));
 
         $shop_orders = [];
         $page = 1;
@@ -327,7 +429,7 @@ class AccountingReport extends WC_Admin_Report
             'status' => get_option('bjorntech_wcar_include_order_statuses', ['wc-completed']),
         );
 
-        Logger::add('shop_order_refund_params: ' . print_r($shop_order_refund_params, true));
+        Logger::add('Refund params: ' . wp_json_encode($shop_order_refund_params));
 
         $shop_order_refunds = [];
         $page = 1;
@@ -355,15 +457,15 @@ class AccountingReport extends WC_Admin_Report
                     'date_paid' => $period,
                     'type' => 'shop_order',
                     'status' => 'refunded',
-                    'exclude' => $already_got_ids,
                     'limit' => -1,
                 )
             );
 
             // Only include the fully refunded orders that never got to the completed stage until refunded
+            // and that aren't already in our results.
             $refunded_before_completion = array();
             foreach ($extras as $extra) {
-                if (!$extra->get_date_completed()) {
+                if (!in_array($extra->get_id(), $already_got_ids, true) && !$extra->get_date_completed()) {
                     array_push($refunded_before_completion, $extra);
                 }
             }
@@ -387,17 +489,6 @@ class AccountingReport extends WC_Admin_Report
         $parent_id = 0;
         $total_payments = array();
 
-        $tax_rates_array = WC_Tax::find_rates(
-            array(
-                'country' => $my_country,
-                'state' => WC()->countries->get_base_state(),
-                'postcode' => WC()->countries->get_base_postcode(),
-                'city' => WC()->countries->get_base_city(),
-                'tax_class' => get_option('woo_ar_reverse_tax_class'),
-            )
-        );
-        $tax_rates = reset($tax_rates_array);
-        $accounting_reverse_calculate_tax_class = key($tax_rates_array);
 
         foreach ($orders as $order) {
 
@@ -418,9 +509,23 @@ class AccountingReport extends WC_Admin_Report
                 $order_currency = $parent_order->get_currency();
                 $completed_date = 'n/a';
                 if (($order_value != 0) && ($tax_value == 0)) {
-                    $tax_array = WC_Tax::calc_inclusive_tax($order_value, $tax_rates_array);
-                    foreach ($tax_array as $tax) {
-                        $tax_value += $tax;
+                    $reverse_tax_rates_array = array();
+                    $parent_order_taxes = $this->get_order_taxes($parent_order);
+
+                    if (1 === count($parent_order_taxes)) {
+                        $parent_tax_rate_id = key($parent_order_taxes);
+                        $parent_tax_rate_percent = (float) reset($parent_order_taxes);
+
+                        $reverse_tax_rates_array[$parent_tax_rate_id] = array(
+                            'rate' => $parent_tax_rate_percent,
+                        );
+                    }
+
+                    if (!empty($reverse_tax_rates_array)) {
+                        $tax_array = WC_Tax::calc_inclusive_tax($order_value, $reverse_tax_rates_array);
+                        foreach ($tax_array as $tax) {
+                            $tax_value += $tax;
+                        }
                     }
                 }
             } else {
@@ -498,37 +603,52 @@ class AccountingReport extends WC_Admin_Report
             asort($all_orders[$key]);
         }
 
-        $exchange_response = $this->get_exchage_rates($base_currency);
+        $requires_exchange_rates = empty(self::$report_type)
+            || in_array('total-sales', self::$report_type)
+            || in_array('all-orders-totals', self::$report_type);
 
-        Logger::add(sprintf('Total sales per tax class %s', json_encode(self::$line_item_total)));
+        $exchange_rates = null;
 
-        Logger::add(sprintf('Total refunds %s', json_encode(self::$refund_total)));
+        if ($requires_exchange_rates) {
+            $exchange_response = $this->get_exchage_rates($base_currency);
 
-        Logger::add(sprintf('Total fees %s', json_encode(self::$fee_total)));
+            if (is_wp_error($exchange_response)) {
+                Logger::add(sprintf('Exchange rates error: %s', $exchange_response->get_error_message()));
 
-        Logger::add(sprintf('Total shipping %s', json_encode(self::$shipping_total)));
+                echo '<div class="notice notice-error inline"><p>' .
+                    esc_html(
+                        sprintf(
+                            /* translators: %s: Error message */
+                            __('Could not load exchange rates. %s', 'woo-accounting-report'),
+                            $exchange_response->get_error_message()
+                        )
+                    ) .
+                    '</p></div>';
+            } else {
+                $exchange_rates = $exchange_response->rates;
+            }
+        }
 
-        Logger::add(sprintf('Total sales per tax class VAT %s', json_encode(self::$line_item_total_tax)));
+        Logger::add(sprintf('Total sales per tax class %s', wp_json_encode(self::$line_item_total)));
 
-        Logger::add(sprintf('Total refunds VAT %s', json_encode(self::$refund_total_tax)));
+        Logger::add(sprintf('Total refunds %s', wp_json_encode(self::$refund_total)));
 
-        Logger::add(sprintf('Total fees VAT %s', json_encode(self::$fee_total_tax)));
+        Logger::add(sprintf('Total fees %s', wp_json_encode(self::$fee_total)));
 
-        Logger::add(sprintf('Total shipping VAT %s', json_encode(self::$shipping_total_tax)));
+        Logger::add(sprintf('Total shipping %s', wp_json_encode(self::$shipping_total)));
 
-        Logger::add(sprintf('All orders %s', json_encode($all_orders)));
+        Logger::add(sprintf('Total sales per tax class VAT %s', wp_json_encode(self::$line_item_total_tax)));
 
+        Logger::add(sprintf('Total refunds VAT %s', wp_json_encode(self::$refund_total_tax)));
 
-        echo '<div style="display: flex; justify-content: flex-end; align-items: center; flex-direction: column; margin: 20px 0; text-align: center;">
-                    <div style="border: 1px solid lightgrey; background-color: lightgrey; padding: 15px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); display: flex; flex-direction: column; align-items: center;">
-                        <p style="font-weight: bold; margin-bottom: 10px;">New Report i the Analytics section</p>
-                        <p>We are happy to announce the beta of a new report in the Analytics section. Please have a look <a href="/wp-admin/admin.php?page=wc-admin&path=%2Fanalytics%2Fwoo-accounting-report">here</a></p>
-                    </div>
-                </div>';
+        Logger::add(sprintf('Total fees VAT %s', wp_json_encode(self::$fee_total_tax)));
 
+        Logger::add(sprintf('Total shipping VAT %s', wp_json_encode(self::$shipping_total_tax)));
 
-        if (empty(self::$report_type) || in_array('total-sales', self::$report_type)) {
-            TotalSales::render(self::$site_currencies, $base_currency, $exchange_response->rates, self::$tax_classes, self::$line_item_total, self::$refund_total, self::$fee_total, self::$line_item_total_tax, self::$refund_total_tax, self::$fee_total_tax, self::$shipping_total_tax, self::$shipping_total, self::$sum_total_items, self::$sum_total_order);
+        Logger::add(sprintf('All orders %s', wp_json_encode($all_orders)));
+
+        if ((empty(self::$report_type) || in_array('total-sales', self::$report_type)) && is_object($exchange_rates)) {
+            TotalSales::render(self::$site_currencies, $base_currency, $exchange_rates, self::$tax_classes, self::$line_item_total, self::$refund_total, self::$fee_total, self::$line_item_total_tax, self::$refund_total_tax, self::$fee_total_tax, self::$shipping_total_tax, self::$shipping_total, self::$sum_total_items, self::$sum_total_order);
         }
 
         if (empty(self::$report_type) || in_array('sales-per-region', self::$report_type)) {
@@ -543,8 +663,8 @@ class AccountingReport extends WC_Admin_Report
             AllOrders::render($all_orders, self::$show_fortnox, self::$eu_tax_used, $payment_method_titles, $sort_criteria);
         }
 
-        if (in_array('all-orders-totals', self::$report_type)) {
-            AllOrdersTotals::render($all_orders, self::$site_currencies, self::$eu_tax_used, $exchange_response->rates, $payment_method_titles, $base_currency, $sort_criteria);
+        if (in_array('all-orders-totals', self::$report_type) && is_object($exchange_rates)) {
+            AllOrdersTotals::render($all_orders, self::$site_currencies, self::$eu_tax_used, $exchange_rates, $payment_method_titles, $base_currency, $sort_criteria);
         }
 
         if (count(self::$order_differences) > 0) {

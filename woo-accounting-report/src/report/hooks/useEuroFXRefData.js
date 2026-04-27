@@ -1,34 +1,54 @@
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import xml2js from 'xml2js';
+import { useEffect, useState } from '@wordpress/element';
+import apiFetch from '@wordpress/api-fetch';
+
+const defaultRates = {};
 
 const useEuroFXRefData = () => {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(defaultRates);
   const [error, setError] = useState(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  const fetchData = async (currency, date) => {
-    try {
-      const response = await axios.get(
-        'https://57e9wwzgog.execute-api.eu-north-1.amazonaws.com/prod/exchange-rates'
-      );
-      setData(response.data);
-    } catch (err) {
-      setError(err);
-    }
-  };
+  useEffect(() => {
+    let isMounted = true;
 
-  const getRateByCurrency = (code, date) => {
-    fetchData(code, date)
-      .then((data) => {
-        return data.rates[code];
+    apiFetch({ path: '/bjorntech-accounting/v1/exchange-rates?base=EUR' })
+      .then((response) => {
+        if (!isMounted) {
+          return;
+        }
+
+        if (response?.rates && typeof response.rates === 'object') {
+          setData(response.rates);
+        } else {
+          setError(new Error('Exchange rate response did not include rates.'));
+        }
       })
       .catch((err) => {
-        console.log(err);
-        return 0;
+        if (isMounted) {
+          setError(err);
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoaded(true);
+        }
       });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const getRateByCurrency = (code) => {
+    if (!code || code === 'EUR') {
+      return 1;
+    }
+
+    const rate = Number(data?.[code]);
+    return Number.isFinite(rate) && rate > 0 ? rate : null;
   };
 
-  return { data, error, getRateByCurrency };
+  return { data, error, isLoaded, getRateByCurrency };
 };
 
 export default useEuroFXRefData;

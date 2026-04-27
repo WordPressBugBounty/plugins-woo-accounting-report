@@ -118,7 +118,7 @@ class ReportFilters extends Component {
 		return (
 			<Fragment>
 				<H className="screen-reader-text">
-					{ __( 'Filters', 'woocommerce' ) }
+					{ __( 'Filters', 'woo-accounting-report' ) }
 				</H>
 				<Section component="div" className="woocommerce-filters">
 					<div className="woocommerce-filters__basic-filters">

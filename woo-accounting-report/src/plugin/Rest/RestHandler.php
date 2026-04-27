@@ -6,20 +6,24 @@ namespace BjornTech\AccountingReport\Rest;
 
 defined('ABSPATH') || exit;
 
-use BjornTech\Common\SingletonTrait;
-
-
 class RestHandler
 {
 
-    use SingletonTrait;
+    use \BjornTech\AccountingReport\AccountingReportSingletonTrait;
+
+    private const REST_CONTROLLERS = [
+        RestRefundsController::class,
+        RestOrdersController::class,
+        RestEuCountriesController::class,
+        RestExchangeRatesController::class,
+        RestEuVatController::class,
+        RestLogController::class,
+    ];
 
     public function __construct()
     {
-        if ('yes' === get_option('wcar_load_analytics','yes')) {
-            add_filter('woocommerce_rest_api_get_rest_namespaces', array($this, 'get_rest_namespaces'));
-            add_filter("pre_option_bjorntech_wcar_nonce", array($this, 'get_nonce'), 10, 3);
-        }
+        add_action('rest_api_init', array($this, 'register_routes'));
+        add_filter("pre_option_bjorntech_wcar_nonce", array($this, 'get_nonce'), 10, 3);
     }
 
     /**
@@ -27,15 +31,37 @@ class RestHandler
      *
      * New endpoints/controllers can be added here.
      */
-    public function get_rest_namespaces($routes)
+    public function register_routes()
     {
 
-        $routes['wc/v3'][] = 'BjornTech\AccountingReport\Rest\RestRefundsController';
-        $routes['wc/v3'][] = 'BjornTech\AccountingReport\Rest\RestOrdersController';
-        $routes['wc/v3'][] = 'BjornTech\AccountingReport\Rest\RestEuCountriesController';
-        $routes['wc/v3'][] = 'BjornTech\AccountingReport\Rest\RestLogController';
+        foreach (self::REST_CONTROLLERS as $controller_class) {
+            if (!class_exists($controller_class)) {
+                $controller_file = __DIR__ . '/' . $this->get_class_name($controller_class) . '.php';
 
-        return $routes;
+                if (file_exists($controller_file)) {
+                    require_once $controller_file;
+                }
+            }
+
+            if (!class_exists($controller_class)) {
+                continue;
+            }
+
+            $controller = new $controller_class();
+            $controller->register_routes();
+
+            if (method_exists($controller, 'register_routes_v2')) {
+                $controller->register_routes_v2();
+            }
+        }
+
+    }
+
+    private function get_class_name($class_name)
+    {
+        $parts = explode('\\', (string) $class_name);
+
+        return end($parts);
     }
 
     public function get_nonce($status, $option, $default)
@@ -45,7 +71,7 @@ class RestHandler
             return $status;
         }
 
-        $nonce = wp_create_nonce(WC_ACCOUNTING_REPORT_ID);
+        $nonce = wp_create_nonce('wp_rest');
 
         return $nonce;
 

@@ -14,12 +14,12 @@ class OrderDifferences
         echo '<div class="row">';
         echo '<table cellspacing="0" cellpadding="2" class="styled-table">';
         echo '<caption>';
-        echo __('Differences found in orders', 'woo-accounting-report');
+        echo esc_html__('Differences found in orders', 'woo-accounting-report');
         echo '</caption>';
         echo '<thead>';
         echo '<tr>';
         echo '<th scope="col" style="text-align:left;">';
-        echo __('Order details', 'woo-accounting-report');
+        echo esc_html__('Order details', 'woo-accounting-report');
         echo '</th>';
         echo '</tr>';
         echo '</thead>';
@@ -27,7 +27,7 @@ class OrderDifferences
             echo '<tbody>';
             echo '<tr>';
             echo '<td align="left">';
-            echo $order_difference;
+            echo esc_html($order_difference);
             echo '</td>';
             echo '</tr>';
             echo '</tbody>';
@@ -37,4 +37,3 @@ class OrderDifferences
 
     }
 }
-

@@ -12,7 +12,6 @@ const usePagination = (initialData, initialQuery) => {
 
     const handleQueryChange = useCallback((param) => {
         return (value) => {
-            console.log('handleQueryChange', param, value);
             setQuery((prevQuery) => ({
                 ...prevQuery,
                 [param]: value,

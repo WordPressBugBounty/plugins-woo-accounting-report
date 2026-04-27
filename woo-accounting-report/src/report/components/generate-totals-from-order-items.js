@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 const existingKey = (key, array) => {
     return array.find(item => {
@@ -20,8 +20,21 @@ const generateTotalFromOrderItems = (order, itemTotal, itemType, orderTaxes, row
 
         let addedTotals = false;
         const total = Number(item.total * currencyRate);
-        const totalTax = Number(item.total_tax * currencyRate);
-        let taxArray = ((total === 0 && totalTax === 0) || item.taxes.length > 0) ? item.taxes : [{ id: -1, total: 0 }];
+        const rawTotalTax = Number(item.total_tax);
+        const totalTax = Number(rawTotalTax * currencyRate);
+
+        const itemTaxes = item.taxes || [];
+        const hasItemTaxes = itemTaxes.length > 0;
+        const orderTaxIds = Object.keys(orderTaxes || {});
+
+        let fallbackTaxId = -1;
+        if (!hasItemTaxes && totalTax !== 0 && orderTaxIds.length === 1) {
+            fallbackTaxId = Number(orderTaxIds[0]);
+        }
+
+        let taxArray = ((total === 0 && totalTax === 0) || hasItemTaxes)
+            ? itemTaxes
+            : [{ id: fallbackTaxId, total: rawTotalTax }];
 
         for (const tax of taxArray) {
             const itemId = consolidate ? 'item' : (refund ? 'refund' : itemType)
@@ -42,7 +55,13 @@ const generateTotalFromOrderItems = (order, itemTotal, itemType, orderTaxes, row
                 // If no object with the current key exists, create a new object and add it to the itemTotal array
                 const labelToUse = refund ? __('Refunds', 'woo-accounting-report') : rowLabel;
                 const taxPercentage = tax.id === -1 ? 0 : (orderTaxes[tax.id]?.rate_percent || 0);
-                const title = __(`${labelToUse} to ${countryCode} with ${taxPercentage}% tax`, 'woo-accounting-report');
+                const title = sprintf(
+                    /* translators: 1: row label, 2: country code, 3: tax percentage */
+                    __('%1$s to %2$s with %3$s%% tax', 'woo-accounting-report'),
+                    labelToUse,
+                    countryCode,
+                    taxPercentage
+                );
 
                 itemTotal.push({
                     key,

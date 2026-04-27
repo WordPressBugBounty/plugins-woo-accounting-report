@@ -20,7 +20,7 @@ class RestEuCountriesController extends WC_REST_Data_Controller
      *
      * @var string
      */
-    protected $namespace = 'wc/v3';
+    protected $namespace = 'bjorntech-accounting/v1';
 
     /**
      * Route base.
@@ -44,9 +44,39 @@ class RestEuCountriesController extends WC_REST_Data_Controller
                     'methods' => WP_REST_Server::READABLE,
                     'callback' => array($this, 'get_items'),
                     'permission_callback' => array($this, 'permission_check'),
+                    'args' => array(
+                        'scope' => array(
+                            'description' => __('Country list scope.', 'woo-accounting-report'),
+                            'type' => 'string',
+                            'default' => '',
+                            'sanitize_callback' => 'sanitize_key',
+                            'validate_callback' => array($this, 'validate_scope_param'),
+                        ),
+                    ),
                 ),
                 'schema' => array($this, 'get_public_item_schema'),
             )
+        );
+    }
+
+    public function validate_scope_param($value, WP_REST_Request $request, $param)
+    {
+        if (!is_string($value)) {
+            return new WP_Error(
+                'woocommerce_rest_invalid_scope',
+                __('The scope must be a string.', 'woo-accounting-report'),
+                array('status' => 400)
+            );
+        }
+
+        if ('' === $value || 'eu_vat' === $value) {
+            return true;
+        }
+
+        return new WP_Error(
+            'woocommerce_rest_invalid_scope',
+            __('The scope must be empty or "eu_vat".', 'woo-accounting-report'),
+            array('status' => 400)
         );
     }
 
@@ -128,13 +158,13 @@ class RestEuCountriesController extends WC_REST_Data_Controller
             'properties' => array(
                 'code' => array(
                     'type' => 'string',
-                    'description' => __('ISO3166 alpha-2 country code.', 'woocommerce'),
+                    'description' => __('ISO3166 alpha-2 country code.', 'woo-accounting-report'),
                     'context' => array('view'),
                     'readonly' => true,
                 ),
                 'name' => array(
                     'type' => 'string',
-                    'description' => __('Full name of country.', 'woocommerce'),
+                    'description' => __('Full name of country.', 'woo-accounting-report'),
                     'context' => array('view'),
                     'readonly' => true,
                 ),

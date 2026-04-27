@@ -95,7 +95,7 @@ const Tag = forwardRef(
 						onClick={ remove( id ) }
 						label={ sprintf(
 							// translators: %s is the name of the tag being removed.
-							__( 'Remove %s', 'woocommerce' ),
+							__( 'Remove %s', 'woo-accounting-report' ),
 							label
 						) }
 						aria-describedby={ labelId }

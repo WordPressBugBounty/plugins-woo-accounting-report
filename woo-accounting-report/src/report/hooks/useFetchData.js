@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from '@wordpress/element';
 import apiFetch from '@wordpress/api-fetch';
 import getSetting from './wooCommerceOptions';
 import logger from '../components/logger';
@@ -34,12 +34,145 @@ const calculateItemsTotal = (items) => {
     return total;
 };
 
+const safeNumber = (value) => Number(value ?? 0);
+
+const convertTaxEntries = (taxes, multiplier) => {
+    if (!Array.isArray(taxes)) {
+        return [];
+    }
+
+    return taxes.map((tax) => ({
+        ...tax,
+        total: safeNumber(tax.total) * multiplier,
+        subtotal: safeNumber(tax.subtotal) * multiplier,
+    }));
+};
+
+const convertOrderItems = (items, multiplier) => {
+    if (!Array.isArray(items)) {
+        return [];
+    }
+
+    return items.map((item) => ({
+        ...item,
+        total: safeNumber(item.total) * multiplier,
+        subtotal: safeNumber(item.subtotal) * multiplier,
+        total_tax: safeNumber(item.total_tax) * multiplier,
+        subtotal_tax: safeNumber(item.subtotal_tax) * multiplier,
+        taxes: convertTaxEntries(item.taxes, multiplier),
+    }));
+};
+
+const convertGiftCardLines = (giftCardLines, multiplier) => {
+    if (!Array.isArray(giftCardLines)) {
+        return [];
+    }
+
+    return giftCardLines.map((giftCardLine) => ({
+        ...giftCardLine,
+        amount: safeNumber(giftCardLine.amount) * multiplier,
+    }));
+};
+
+const isEnabledSetting = (value) => {
+    return ['yes', 'true', '1', 1, true, 'on'].includes(value);
+};
+
+const getStoreCurrencyCode = async (storeCurrencySetting) => {
+    const wcCurrencyOption = await getSetting('woocommerce_currency', '');
+    if (wcCurrencyOption) {
+        return String(wcCurrencyOption).toUpperCase();
+    }
+
+    try {
+        const wcCurrencySetting = await apiFetch({ path: '/wc/v3/settings/general/woocommerce_currency' });
+        if (wcCurrencySetting?.value) {
+            return String(wcCurrencySetting.value).toUpperCase();
+        }
+    } catch (error) {
+        logger('store currency lookup error', error?.message || error);
+    }
+
+    return String(
+        storeCurrencySetting?.code || storeCurrencySetting?.currency_code || storeCurrencySetting?.value || ''
+    ).toUpperCase();
+};
+
+const convertMetaData = (metaData, multiplier) => {
+    if (!Array.isArray(metaData)) {
+        return [];
+    }
+
+    return metaData.map((meta) => {
+        if (meta?.key === '_stripe_fee') {
+            return {
+                ...meta,
+                value: safeNumber(meta.value) * multiplier,
+            };
+        }
+
+        return meta;
+    });
+};
+
+const applyLocalCurrencyConversion = async (orders, localCurrencyCode) => {
+    if (!Array.isArray(orders) || orders.length === 0) {
+        return orders;
+    }
+
+    const normalizedLocalCurrency = String(localCurrencyCode || '').toUpperCase();
+    const orderCurrencies = Array.from(new Set(
+        orders
+            .map((order) => String(order.currency || '').toUpperCase())
+            .filter((currency) => currency && currency !== normalizedLocalCurrency)
+    ));
+
+    if (!normalizedLocalCurrency || orderCurrencies.length === 0) {
+        return orders.map((order) => ({
+            ...order,
+            currency: normalizedLocalCurrency || order.currency,
+        }));
+    }
+
+    const exchangeRateResponse = await apiFetch({
+        path: `/bjorntech-accounting/v1/exchange-rates?base=${normalizedLocalCurrency}&symbols=${orderCurrencies.join(',')}`,
+    });
+
+    const rates = exchangeRateResponse?.rates || {};
+
+    return orders.map((order) => {
+        const orderCurrency = String(order.currency || '').toUpperCase();
+        const rawRate = orderCurrency && orderCurrency !== normalizedLocalCurrency
+            ? Number(rates[orderCurrency])
+            : 1;
+        const multiplier = rawRate > 0 ? 1 / rawRate : 1;
+
+        return {
+            ...order,
+            currency: normalizedLocalCurrency,
+            total: safeNumber(order.total) * multiplier,
+            total_tax: safeNumber(order.total_tax) * multiplier,
+            stripe_fee: safeNumber(order.stripe_fee) * multiplier,
+            line_items: convertOrderItems(order.line_items, multiplier),
+            fee_lines: convertOrderItems(order.fee_lines, multiplier),
+            shipping_lines: convertOrderItems(order.shipping_lines, multiplier),
+            pw_gift_card_lines: convertGiftCardLines(order.pw_gift_card_lines, multiplier),
+            meta_data: convertMetaData(order.meta_data, multiplier),
+        };
+    });
+};
+
 const defaultData = {
     isLoaded: false,
     orders: [],
     allCountries: [],
     taxClasses: [],
     euCountries: [],
+    reportOnStatus: 'date_completed',
+    presentInLocalCurrency: false,
+    localCurrencyCode: '',
+    treatAllSalesAsDomestic: false,
+    storeCountryCode: '',
 };
 const useFetchData = (storeCurrencySetting) => {
 
@@ -111,17 +244,22 @@ const useFetchData = (storeCurrencySetting) => {
     const fetchData = async (dateQuery) => {
 
         setProcessing(true);
+        setError(null);
         setData(defaultData);
 
         const includeOrderStatuses = await getSetting('bjorntech_wcar_include_order_statuses', ['completed']);
         const reportOnStatus = await getSetting('bjorntech_wcar_on_status', 'date_completed');
+        const treatAllSalesAsDomestic = isEnabledSetting(await getSetting('bjorntech_wcar_force_local', 'no'));
+        const storeCountryCode = String(await getSetting('woocommerce_default_country', '')).split(':')[0] || '';
+        const presentInLocalCurrencySetting = await getSetting('bjorntech_wcar_present_local_currency', 'no');
+        const presentInLocalCurrency = isEnabledSetting(presentInLocalCurrencySetting);
+        const localCurrencyCode = await getStoreCurrencyCode(storeCurrencySetting);
         const endPoints = {
-            "eu_countries": "/wc/v3/data/eu-countries?_fields=code&scope=eu_vat",
+            "eu_countries": "/bjorntech-accounting/v1/data/eu-countries?_fields=code&scope=eu_vat",
             "countries": "/wc/v3/data/countries?_fields=code,name",
             'tax_classes': '/wc/v3/taxes?context=view',
-            'orders': '/wc/v3/accounting/orders?context=view',
-            'refunds': '/wc/v3/accounting/refunds?context=view',
-            'exchange_rates': 'https://accounting.bjorntech.net/v1/exchange-rates?base=' + storeCurrencySetting.code,
+            'orders': '/bjorntech-accounting/v1/orders?context=view',
+            'refunds': '/bjorntech-accounting/v1/refunds?context=view',
         };
 
         const euCountriesPath = endPoints.eu_countries;
@@ -136,8 +274,11 @@ const useFetchData = (storeCurrencySetting) => {
             const { orders } = rawData;
             const preparedOrders = orders.map(order => ({
                 ...order,
-                stripe_fee: Number(getMetaData(order, '_stripe_fee')),
+                stripe_fee: Number(order.stripe_fee ?? getMetaData(order, '_stripe_fee')),
                 buyer_name: order.billing?.company || `${order.billing?.first_name} ${order.billing?.last_name}`,
+                effective_billing_country: rawData.treatAllSalesAsDomestic
+                    ? rawData.storeCountryCode
+                    : (order.billing?.country ?? ''),
                 line_items_total: order.line_items ? calculateItemsTotal(order.line_items) : 0,
                 fee_total: order.fee_lines ? calculateItemsTotal(order.fee_lines) : 0,
                 total: Number(order.total ?? 0) + addPwGiftCardSales(order.pw_gift_card_lines)
@@ -147,35 +288,48 @@ const useFetchData = (storeCurrencySetting) => {
 
         };
 
-        Promise.all([
+        try {
+            const result = await Promise.all([
+                apiFetch({ path: euCountriesPath }),
+                apiFetch({ path: countriesPath }),
+                apiFetch({ path: taxClassesPath }),
+                fetchAllOrders(ordersPath, dateQuery, includeOrderStatuses, reportOnStatus),
+                fetchAllRefunds(refundsPath, dateQuery),
+            ]);
 
-            apiFetch({ path: euCountriesPath }),
-            apiFetch({ path: countriesPath }),
-            apiFetch({ path: taxClassesPath }),
-            fetchAllOrders(ordersPath, dateQuery, includeOrderStatuses, reportOnStatus),
-            fetchAllRefunds(refundsPath, dateQuery),
-            fetch(endPoints.exchange_rates),
+            const [eu_countries, countries, tax_classes, orders, refunds] = result;
+            let allOrders = orders.concat(refunds);
 
-        ]).then((result) => {
-
-            const [eu_countries, countries, tax_classes, orders, refunds, exchange_rates] = result;
+            if (presentInLocalCurrency) {
+                try {
+                    allOrders = await applyLocalCurrencyConversion(allOrders, localCurrencyCode);
+                } catch (conversionError) {
+                    logger('local currency conversion error', conversionError?.message || conversionError);
+                }
+            }
 
             const rawData = {
                 isLoaded: true,
-                orders: orders.concat(refunds),
+                orders: allOrders,
                 allCountries: countries,
                 taxClasses: tax_classes,
-                euCountries: eu_countries
+                euCountries: eu_countries,
+                reportOnStatus,
+                presentInLocalCurrency,
+                localCurrencyCode,
+                treatAllSalesAsDomestic,
+                storeCountryCode,
             };
 
-            prepareData(rawData).then((preparedData) => {
-
-                setData(preparedData);
-                setProcessing(false);
-                logger('useAccountingReport data', preparedData);
-
-            });
-        })
+            const preparedData = await prepareData(rawData);
+            setData(preparedData);
+            logger('useAccountingReport data', preparedData);
+        } catch (fetchError) {
+            setError(fetchError);
+            logger('useAccountingReport error', fetchError?.message || fetchError);
+        } finally {
+            setProcessing(false);
+        }
 
     };
 

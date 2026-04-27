@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 import {
     useEffect,
@@ -22,7 +22,7 @@ import {
     generateCSVFileName,
 } from '@woocommerce/csv-export';
 
-import { formatNumber } from '../format-number';
+import { formatAmount, formatNumber } from '../format-number';
 import DownloadIcon from '../download-icon';
 
 import generateTotalFromOrderItems from '../generate-totals-from-order-items';
@@ -36,23 +36,29 @@ const prepareData = (orders) => {
     let allTaxRates = [];
     const mappedOrders = orders.map(order => {
         let tax_rates = [];
-        const orderTaxRates = order.tax_lines;
-        order.line_items.forEach(item => {
-            item.taxes.forEach(tax => {
+        const orderTaxRates = order.tax_lines || [];
 
-                const rateId = tax.rate.toString();
-                const ratePercent = orderTaxRates.find(rate => rate.rate_id.toString() === rateId)?.rate_percent;
+        const appendTaxesFromItems = (items = []) => {
+            items.forEach(item => {
+                (item.taxes || []).forEach(tax => {
+                    const rateId = (tax.rate ?? tax.id)?.toString();
+                    const ratePercent = orderTaxRates.find(rate => rate.rate_id.toString() === rateId)?.rate_percent ?? '0';
 
-                tax_rates.push({
-                    tax_percent: ratePercent,
-                    tax_total: parseFloat(tax.total)
+                    tax_rates.push({
+                        tax_percent: ratePercent,
+                        tax_total: parseFloat(tax.total)
+                    });
+
+                    if (!allTaxRates.includes(ratePercent)) {
+                        allTaxRates.push(ratePercent);
+                    }
                 });
-                
-                if (!allTaxRates.includes(ratePercent)) {
-                    allTaxRates.push(ratePercent);
-                }
             });
-        });
+        };
+
+        appendTaxesFromItems(order.line_items || []);
+        appendTaxesFromItems(order.shipping_lines || []);
+        appendTaxesFromItems(order.fee_lines || []);
 
         return {
             ...order,
@@ -66,7 +72,19 @@ const prepareData = (orders) => {
     };
 };
 
+const getDateFieldFromStatus = (reportOnStatus) => {
+    const allowedFields = ['date_created', 'date_paid', 'date_completed'];
+    return allowedFields.includes(reportOnStatus) ? reportOnStatus : 'date_created';
+};
+
+const getOrderDate = (order, dateField) => {
+    const dateValue = order?.[dateField] || order?.date_created || '';
+    return typeof dateValue === 'string' ? dateValue : '';
+};
+
 export const AllOrdersTable = ({ data, currency }) => {
+
+    const selectedDateField = getDateFieldFromStatus(data?.reportOnStatus);
 
     const [allTaxRates, setAllTaxRates] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -127,7 +145,10 @@ export const AllOrdersTable = ({ data, currency }) => {
 
     const allTaxesHeader = allTaxRates.map(rate => ({
         key: `tax_rate_${rate}`,
-        label: __(`${rate}% TAX`, 'woo-accounting-report'),
+        label: sprintf(
+            __('%s%% TAX', 'woo-accounting-report'),
+            rate
+        ),
         isSortable: true,
         isNumeric: true
     }));
@@ -151,25 +172,45 @@ export const AllOrdersTable = ({ data, currency }) => {
 
     const formatTableData = (orders) => {
         return orders.map(item => {
+            const orderDate = getOrderDate(item, selectedDateField);
+            const totalValue = Number(item.total ?? 0);
+            const totalTaxValue = Number(item.total_tax ?? 0);
+            const isRefund = Boolean(item.parent_id);
+
+            let itemNetValue = Number(item.line_items_total ?? 0);
+            if (isRefund && itemNetValue === 0 && totalValue !== 0) {
+                itemNetValue = totalValue - totalTaxValue;
+            }
+
+            const shippingValue = Number(item.shipping_total ?? 0);
+            const feeValue = Number(item.fee_total ?? 0);
+            const stripeFeeValue = Number(item.stripe_fee ?? 0);
+
             const allTaxesColumns = allTaxRates.map(rate => {
-                const taxObject = item.tax_rates.find(tax => tax.tax_percent === rate);
-                return { display: formatNumber(taxObject?.tax_total || 0, item.total), value: taxObject?.tax_total || 0 }
+                const taxTotalForRate = item.tax_rates.reduce((sum, tax) => {
+                    if (tax.tax_percent === rate) {
+                        return sum + (Number(tax.tax_total) || 0);
+                    }
+                    return sum;
+                }, 0);
+
+                return { display: formatNumber(taxTotalForRate, item.total), value: taxTotalForRate }
             });
             return [
-                { display: formatNumber(item.date_created.substring(0, 10), item.total, false), value: item.date_created },
-                { display: formatNumber(item.number, item.total, false), value: item.number },
-                { display: formatNumber(item.id, item.total, false), value: item.id },
-                { display: formatNumber(item.buyer_name, item.total, false), value: item.buyer_name },
-                { display: formatNumber(item.billing.country, item.total, false), value: item.billing.country },
-                { display: formatNumber(item.payment_method_title, item.total, false), value: item.payment_method_title },
-                { display: formatNumber(item.currency, item.total, false), value: item.currency },
-                { display: formatNumber(item.line_items_total, item.total), value: item.item_total },
-                { display: formatNumber(item.shipping_total, item.total), value: item.shipping_total },
-                { display: formatNumber(item.fee_total, item.total), value: item.fee_total },
-                { display: formatNumber(item.stripe_fee, item.total), value: item.stripe_fee },
+                { display: formatNumber(orderDate.substring(0, 10), totalValue, false), value: orderDate },
+                { display: formatNumber(item.number, totalValue, false), value: item.number },
+                { display: formatNumber(item.id, totalValue, false), value: item.id },
+                { display: formatNumber(item.buyer_name, totalValue, false), value: item.buyer_name },
+                { display: formatNumber(item.billing?.country, totalValue, false), value: item.billing?.country },
+                { display: formatNumber(item.payment_method_title, totalValue, false), value: item.payment_method_title },
+                { display: formatNumber(item.currency, totalValue, false), value: item.currency },
+                { display: formatNumber(itemNetValue, totalValue), value: itemNetValue },
+                { display: formatNumber(shippingValue, totalValue), value: shippingValue },
+                { display: formatNumber(feeValue, totalValue), value: feeValue },
+                { display: formatNumber(stripeFeeValue, totalValue), value: stripeFeeValue },
                 ...allTaxesColumns,
-                { display: formatNumber(item.total_tax, item.total), value: item.total_tax },
-                { display: formatNumber(item.total, item.total), value: item.total },
+                { display: formatNumber(totalTaxValue, totalValue), value: totalTaxValue },
+                { display: formatNumber(totalValue, totalValue), value: totalValue },
             ];
         });
     };
@@ -181,14 +222,14 @@ export const AllOrdersTable = ({ data, currency }) => {
     }
 
     const formatCurrencyValue = (value, currencyCode) => {
-        return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(value);
+        return `${currencyCode} ${formatAmount(value)}`;
     };
 
     if (!data.orders || data.orders.length === 0) {
         return (
             <TableCard
                 key={0}
-                title={__(`All Orders`, 'woo-accounting-report')}
+                title={__('All Orders', 'woo-accounting-report')}
                 headers={headers}
                 rows={[]}
                 rowsPerPage={1}
@@ -206,7 +247,10 @@ export const AllOrdersTable = ({ data, currency }) => {
                     key={currencyCode}
                     initialData={formatTableData(orders)}
                     columns={headers}
-                    title={__(`All Orders - ${currencyCode}`, 'woo-accounting-report')}
+                    title={sprintf(
+                        __('All Orders - %s', 'woo-accounting-report'),
+                        currencyCode
+                    )}
                     isLoading={isLoading}
                     actions={[
                         (
@@ -242,4 +286,3 @@ export const AllOrdersTable = ({ data, currency }) => {
     );
 
 }
-

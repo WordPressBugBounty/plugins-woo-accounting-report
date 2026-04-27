@@ -32,8 +32,8 @@ import { Text } from '../experimental';
 import { backwardsCompatibleCreateInterpolateElement as createInterpolateElement } from './utils';
 
 const matches = [
-	{ value: 'all', label: __( 'All', 'woocommerce' ) },
-	{ value: 'any', label: __( 'Any', 'woocommerce' ) },
+	{ value: 'all', label: __( 'All', 'woo-accounting-report' ) },
+	{ value: 'any', label: __( 'Any', 'woo-accounting-report' ) },
 ];
 
 /**
@@ -153,7 +153,7 @@ class AdvancedFilters extends Component {
 					onChange={ this.onMatchChange }
 					aria-label={ __(
 						'Choose to apply any or all filters',
-						'woocommerce'
+						'woo-accounting-report'
 					) }
 				/>
 			),
@@ -339,7 +339,7 @@ class AdvancedFilters extends Component {
 										aria-expanded={ isOpen }
 									>
 										<AddOutlineIcon />
-										{ __( 'Add a filter', 'woocommerce' ) }
+										{ __( 'Add a filter', 'woo-accounting-report' ) }
 									</Button>
 								) }
 								renderContent={ ( { onClose } ) => (
@@ -367,7 +367,7 @@ class AdvancedFilters extends Component {
 					<div className="woocommerce-filters-advanced__controls">
 						{ updateDisabled && (
 							<Button isPrimary disabled>
-								{ __( 'Filter', 'woocommerce' ) }
+								{ __( 'Filter', 'woo-accounting-report' ) }
 							</Button>
 						) }
 						{ ! updateDisabled && (
@@ -377,7 +377,7 @@ class AdvancedFilters extends Component {
 								href={ updateHref }
 								onClick={ this.onFilter }
 							>
-								{ __( 'Filter', 'woocommerce' ) }
+								{ __( 'Filter', 'woo-accounting-report' ) }
 							</Link>
 						) }
 						{ activeFilters.length > 0 && (
@@ -386,7 +386,7 @@ class AdvancedFilters extends Component {
 								href={ this.getUpdateHref( [] ) }
 								onClick={ this.clearFilters }
 							>
-								{ __( 'Clear all filters', 'woocommerce' ) }
+								{ __( 'Clear all filters', 'woo-accounting-report' ) }
 							</Link>
 						) }
 					</div>

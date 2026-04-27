@@ -1,8 +1,6 @@
 import { Fragment, useState, useEffect, useMemo } from '@wordpress/element';
 import useFetchData from './hooks/useFetchData';
 import { CircularProgress } from '@mui/material';
-import BetaVersionBanner from './components/BetaVersionBanner';
-import SupportPluginPrompt from './components/SupportPluginPrompt';
 import PluginInfo from './components/PluginInfo';
 
 import {
@@ -25,8 +23,9 @@ import { TotalSalesPerTaxClassTable } from './components/tables/TotalSalesPerTax
 import { OssReportTable } from './components/tables/OssReportTable';
 import { AllProductsTable } from './components/tables/AllProductsTable';
 import { CURRENCY as storeCurrencySetting } from '@woocommerce/settings';
-import { appendTimestamp, getCurrentDates, getDateParamsFromQuery, isoDateFormat } from '@woocommerce/date';
+import { appendTimestamp, getCurrentDates, getDateParamsFromQuery } from '@woocommerce/date';
 import getSetting from './hooks/wooCommerceOptions';
+import { setNumberFormatSettings } from './components/format-number';
 
 import logger from './components/logger';
 
@@ -55,6 +54,16 @@ const AcccoutingReport = ({ path, query }) => {
     const storeCurrency = new Currency(storeCurrencySetting);
     const { processing, data, error, fetchData } = useFetchData(storeCurrencySetting);
     const [useOssPane, setUseOssPane] = useState(false);
+    const dateQuery = useMemo(() => createDateQuery(query), [query]);
+    const vatRateDate = useMemo(() => {
+        const beforeDate = dateQuery?.primaryDate?.before;
+
+        if (!beforeDate) {
+            return null;
+        }
+
+        return appendTimestamp(beforeDate, 'end').slice(0, 10);
+    }, [dateQuery]);
 
     useEffect(() => {
         getSetting('bjorntech_wcar_show_oss_pane').then((value) => {
@@ -63,11 +72,20 @@ const AcccoutingReport = ({ path, query }) => {
     }, []);
 
     useEffect(() => {
+        Promise.all([
+            getSetting('bjorntech_wcar_price_thousand_sep', ','),
+            getSetting('bjorntech_wcar_price_decimal_sep', '.'),
+            getSetting('bjorntech_wcar_price_num_decimals', 2),
+        ]).then(([thousandSeparator, decimalSeparator, decimals]) => {
+            setNumberFormatSettings({ thousandSeparator, decimalSeparator, decimals });
+        });
+    }, []);
+
+    useEffect(() => {
         if (!processing) {
-            const dateQuery = createDateQuery(query);
             fetchData(dateQuery);
         }
-    }, [query]);
+    }, [dateQuery]);
 
     const handleDateChange = (query) => {
         const dateQuery = createDateQuery(query);
@@ -161,9 +179,9 @@ const AcccoutingReport = ({ path, query }) => {
                             data={data}
                             currency={storeCurrency}
                             dataIsLoaded={data.isLoaded}
+                            vatRateDate={vatRateDate}
                         />
                     )}
-                    <SupportPluginPrompt />
                 </Fragment>
             </Fragment>
         );

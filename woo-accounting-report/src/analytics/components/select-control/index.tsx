@@ -361,14 +361,14 @@ export class SelectControl extends Component< Props, State > {
 						'%d result found, use up and down arrow keys to navigate.',
 						'%d results found, use up and down arrow keys to navigate.',
 						searchOptions.length,
-						'woocommerce'
+						'woo-accounting-report'
 					),
 					searchOptions.length
 				),
 				'assertive'
 			);
 		} else {
-			debouncedSpeak( __( 'No results.', 'woocommerce' ), 'assertive' );
+			debouncedSpeak( __( 'No results.', 'woo-accounting-report' ), 'assertive' );
 		}
 	}
 

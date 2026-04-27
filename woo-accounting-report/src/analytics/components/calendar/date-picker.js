@@ -101,13 +101,13 @@ class DatePicker extends Component {
 						onChange={ this.onInputChange }
 						onBlur={ partial( this.handleBlur, isOpen, onToggle ) }
 						dateFormat={ dateFormat }
-						label={ __( 'Choose a date', 'woocommerce' ) }
+						label={ __( 'Choose a date', 'woo-accounting-report' ) }
 						error={ error }
 						describedBy={ sprintf(
 							/* translators: %s: date format specification */
 							__(
 								'Date input describing a selected date in format %s',
-								'woocommerce'
+								'woo-accounting-report'
 							),
 							dateFormat
 						) }
@@ -124,7 +124,7 @@ class DatePicker extends Component {
 				renderContent={ ( { onToggle } ) => (
 					<Section component={ false }>
 						<H className="woocommerce-calendar__date-picker-title">
-							{ __( 'select a date', 'woocommerce' ) }
+							{ __( 'select a date', 'woo-accounting-report' ) }
 						</H>
 						<div className="woocommerce-calendar__react-dates is-core-datepicker">
 							<WpDatePicker

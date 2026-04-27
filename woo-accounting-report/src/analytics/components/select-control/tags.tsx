@@ -75,7 +75,7 @@ class Tags extends Component< Props > {
 						}
 						const screenReaderLabel = sprintf(
 							/* translators: %1$s: tag label, %2$s: tag number, %3$s: total number of tags */
-							__( '%1$s (%2$s of %3$s)', 'woocommerce' ),
+							__( '%1$s (%2$s of %3$s)', 'woo-accounting-report' ),
 							item.label,
 							i + 1,
 							selected.length
@@ -103,7 +103,7 @@ class Tags extends Component< Props > {
 							className="clear-icon"
 						/>
 						<span className="screen-reader-text">
-							{ __( 'Clear all', 'woocommerce' ) }
+							{ __( 'Clear all', 'woo-accounting-report' ) }
 						</span>
 					</Button>
 				) }

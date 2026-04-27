@@ -9,8 +9,6 @@ use WP_Error;
 use WP_REST_Request;
 use WP_REST_Response;
 use WP_REST_Server;
-use BjornTech\AccountingReport\Logger;
-use Automattic\WooCommerce\Utilities\OrderUtil;
 
 
 defined('ABSPATH') || exit;
@@ -27,7 +25,7 @@ class RestRefundsController extends WC_REST_Orders_Controller
      * Endpoint namespace.
      * @var string
      */
-    protected $namespace = 'wc/v3/accounting';
+    protected $namespace = 'bjorntech-accounting/v1';
 
     /**
      * Route base.
@@ -76,11 +74,11 @@ class RestRefundsController extends WC_REST_Orders_Controller
             array(
                 'args' => array(
                     'order_id' => array(
-                        'description' => __('The order ID.', 'woocommerce'),
+                        'description' => __('The order ID.', 'woo-accounting-report'),
                         'type' => 'integer',
                     ),
                     'id' => array(
-                        'description' => __('Unique identifier for the resource.', 'woocommerce'),
+                        'description' => __('Unique identifier for the resource.', 'woo-accounting-report'),
                         'type' => 'integer',
                     ),
                 ),
@@ -131,7 +129,7 @@ class RestRefundsController extends WC_REST_Orders_Controller
                 case 'id':
                     $data['id'] = $object->get_id();
                     break;
-                case 'number';
+                case 'number':
                     $data['number'] = $parent->get_order_number();
                     break;
                 case 'payment_method':
@@ -282,7 +280,11 @@ class RestRefundsController extends WC_REST_Orders_Controller
         $this->request['dp'] = is_null($this->request['dp']) ? wc_get_price_decimals() : absint($this->request['dp']);
 
         if (!$object || !$object->get_parent_id()) {
-            return new WP_Error('woocommerce_rest_invalid_order_refund_id', __('Invalid order refund ID.', 'woocommerce'), 404);
+            return new WP_Error(
+                'woocommerce_rest_invalid_order_refund_id',
+                __('Invalid order refund ID.', 'woo-accounting-report'),
+                array('status' => 404)
+            );
         }
 
         $data = $this->get_formatted_item_data($object);
@@ -305,6 +307,7 @@ class RestRefundsController extends WC_REST_Orders_Controller
          * @param WC_Data          $object   Object data.
          * @param WP_REST_Request  $request  Request object.
          */
+        // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- Intentionally re-applying WooCommerce core's documented REST filter (defined in WC_REST_CRUD_Controller::prepare_object_for_response) so existing WC REST consumers receive our refund objects through their established filter callbacks.
         return apply_filters("woocommerce_rest_prepare_{$this->post_type}_object", $response, $object, $request);
     }
 
@@ -317,19 +320,23 @@ class RestRefundsController extends WC_REST_Orders_Controller
     public function get_items($request)
     {
         $query_args = $this->prepare_objects_query($request);
-        if (is_wp_error(current($query_args))) {
-            return current($query_args);
+        if (is_wp_error($query_args)) {
+            return $query_args;
         }
 
         $date_field = !empty($request['date_completed']) ? 'date_completed' : (!empty($request['date_paid']) ? 'date_paid' : 'date_created');
+        $date_value = isset($request[$date_field]) ? trim((string) $request[$date_field]) : '';
 
         $params = array(
-            $date_field => $request[$date_field],
             'paginate' => true,
             'type' => 'shop_order_refund',
-            'limit' => $request['limit'],
-            'page' => $request['page'],
+            'limit' => max(1, absint($request['limit'])),
+            'page' => max(1, absint($request['page'])),
         );
+
+        if ('' !== $date_value) {
+            $params[$date_field] = $date_value;
+        }
 
         $query = new \WC_Order_Query($params);
 
@@ -345,7 +352,7 @@ class RestRefundsController extends WC_REST_Orders_Controller
             $objects[] = $this->prepare_response_for_collection($data);
         }
 
-        $page = (int) $query_args['paged'];
+        $page = isset($query_args['paged']) ? (int) $query_args['paged'] : max(1, absint($request['page']));
         $max_pages = $results->max_num_pages;
 
         $response = rest_ensure_response($objects);
@@ -381,8 +388,6 @@ class RestRefundsController extends WC_REST_Orders_Controller
             $next_link = add_query_arg('page', $next_page, $base);
             $response->link_header('next', $next_link);
         }
-
-        Logger::add('get_refund_items: ' . json_encode($response->data));
 
         return $response;
     }
@@ -421,11 +426,63 @@ class RestRefundsController extends WC_REST_Orders_Controller
      */
     protected function prepare_objects_query($request)
     {
+        if (!isset($request['status'])) {
+            $request['status'] = array('any');
+        }
+
         $args = parent::prepare_objects_query($request);
 
         $args['post_status'] = array_keys(wc_get_order_statuses());
 
         return $args;
+    }
+
+    public function sanitize_date_range_param($value, $request, $param)
+    {
+        if (is_numeric($value)) {
+            return (string) $value;
+        }
+
+        if (!is_string($value)) {
+            return '';
+        }
+
+        return trim($value);
+    }
+
+    public function validate_date_range_param($value, $request, $param)
+    {
+        if (!is_string($value) && !is_numeric($value)) {
+            return new WP_Error(
+                'woocommerce_rest_invalid_date_param',
+                __('The date filter must be a string or number.', 'woo-accounting-report'),
+                array('status' => 400)
+            );
+        }
+
+        $value = trim((string) $value);
+
+        if (!preg_match('/^\d+(?:\.\.\.\d+)?$/', $value)) {
+            return new WP_Error(
+                'woocommerce_rest_invalid_date_param',
+                __('The date filter must be a Unix timestamp or timestamp range.', 'woo-accounting-report'),
+                array('status' => 400)
+            );
+        }
+
+        if (false !== strpos($value, '...')) {
+            list($start, $end) = explode('...', $value, 2);
+
+            if ((int) $start > (int) $end) {
+                return new WP_Error(
+                    'woocommerce_rest_invalid_date_param',
+                    __('The date range start must be less than or equal to the end.', 'woo-accounting-report'),
+                    array('status' => 400)
+                );
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -441,69 +498,69 @@ class RestRefundsController extends WC_REST_Orders_Controller
             'type' => 'object',
             'properties' => array(
                 'id' => array(
-                    'description' => __('Unique identifier for the resource.', 'woocommerce'),
+                    'description' => __('Unique identifier for the resource.', 'woo-accounting-report'),
                     'type' => 'integer',
                     'context' => array('view', 'edit'),
                     'readonly' => true,
                 ),
                 'date_created' => array(
-                    'description' => __("The date the order refund was created, in the site's timezone.", 'woocommerce'),
+                    'description' => __("The date the order refund was created, in the site's timezone.", 'woo-accounting-report'),
                     'type' => 'date-time',
                     'context' => array('view', 'edit'),
                     'readonly' => true,
                 ),
                 'date_created_gmt' => array(
-                    'description' => __('The date the order refund was created, as GMT.', 'woocommerce'),
+                    'description' => __('The date the order refund was created, as GMT.', 'woo-accounting-report'),
                     'type' => 'date-time',
                     'context' => array('view', 'edit'),
                     'readonly' => true,
                 ),
                 'amount' => array(
-                    'description' => __('Refund amount.', 'woocommerce'),
+                    'description' => __('Refund amount.', 'woo-accounting-report'),
                     'type' => 'string',
                     'context' => array('view', 'edit'),
                 ),
                 'item_total' => array(
-                    'description' => __('Item total amount.', 'woocommerce'),
+                    'description' => __('Item total amount.', 'woo-accounting-report'),
                     'type' => 'string',
                     'context' => array('view', 'edit'),
                 ),
                 'reason' => array(
-                    'description' => __('Reason for refund.', 'woocommerce'),
+                    'description' => __('Reason for refund.', 'woo-accounting-report'),
                     'type' => 'string',
                     'context' => array('view', 'edit'),
                 ),
                 'refunded_by' => array(
-                    'description' => __('User ID of user who created the refund.', 'woocommerce'),
+                    'description' => __('User ID of user who created the refund.', 'woo-accounting-report'),
                     'type' => 'integer',
                     'context' => array('view', 'edit'),
                 ),
                 'refunded_payment' => array(
-                    'description' => __('If the payment was refunded via the API.', 'woocommerce'),
+                    'description' => __('If the payment was refunded via the API.', 'woo-accounting-report'),
                     'type' => 'boolean',
                     'context' => array('view'),
                     'readonly' => true,
                 ),
                 'meta_data' => array(
-                    'description' => __('Meta data.', 'woocommerce'),
+                    'description' => __('Meta data.', 'woo-accounting-report'),
                     'type' => 'array',
                     'context' => array('view', 'edit'),
                     'items' => array(
                         'type' => 'object',
                         'properties' => array(
                             'id' => array(
-                                'description' => __('Meta ID.', 'woocommerce'),
+                                'description' => __('Meta ID.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'key' => array(
-                                'description' => __('Meta key.', 'woocommerce'),
+                                'description' => __('Meta key.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'value' => array(
-                                'description' => __('Meta value.', 'woocommerce'),
+                                'description' => __('Meta value.', 'woo-accounting-report'),
                                 'type' => 'mixed',
                                 'context' => array('view', 'edit'),
                             ),
@@ -511,72 +568,72 @@ class RestRefundsController extends WC_REST_Orders_Controller
                     ),
                 ),
                 'line_items' => array(
-                    'description' => __('Line items data.', 'woocommerce'),
+                    'description' => __('Line items data.', 'woo-accounting-report'),
                     'type' => 'array',
                     'context' => array('view', 'edit'),
                     'items' => array(
                         'type' => 'object',
                         'properties' => array(
                             'id' => array(
-                                'description' => __('Item ID.', 'woocommerce'),
+                                'description' => __('Item ID.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'name' => array(
-                                'description' => __('Product name.', 'woocommerce'),
+                                'description' => __('Product name.', 'woo-accounting-report'),
                                 'type' => 'mixed',
                                 'context' => array('view', 'edit'),
                             ),
                             'parent_name' => array(
-                                'description' => __('Parent product name if the product is a variation.', 'woocommerce'),
+                                'description' => __('Parent product name if the product is a variation.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'product_id' => array(
-                                'description' => __('Product ID.', 'woocommerce'),
+                                'description' => __('Product ID.', 'woo-accounting-report'),
                                 'type' => 'mixed',
                                 'context' => array('view', 'edit'),
                             ),
                             'variation_id' => array(
-                                'description' => __('Variation ID, if applicable.', 'woocommerce'),
+                                'description' => __('Variation ID, if applicable.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                             ),
                             'quantity' => array(
-                                'description' => __('Quantity ordered.', 'woocommerce'),
+                                'description' => __('Quantity ordered.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                             ),
                             'tax_class' => array(
-                                'description' => __('Tax class of product.', 'woocommerce'),
+                                'description' => __('Tax class of product.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'subtotal' => array(
-                                'description' => __('Line subtotal (before discounts).', 'woocommerce'),
+                                'description' => __('Line subtotal (before discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'subtotal_tax' => array(
-                                'description' => __('Line subtotal tax (before discounts).', 'woocommerce'),
+                                'description' => __('Line subtotal tax (before discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'total' => array(
-                                'description' => __('Line total (after discounts).', 'woocommerce'),
+                                'description' => __('Line total (after discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'total_tax' => array(
-                                'description' => __('Line total tax (after discounts).', 'woocommerce'),
+                                'description' => __('Line total tax (after discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'taxes' => array(
-                                'description' => __('Line taxes.', 'woocommerce'),
+                                'description' => __('Line taxes.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
@@ -584,17 +641,17 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Tax rate ID.', 'woocommerce'),
+                                            'description' => __('Tax rate ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'total' => array(
-                                            'description' => __('Tax total.', 'woocommerce'),
+                                            'description' => __('Tax total.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'subtotal' => array(
-                                            'description' => __('Tax subtotal.', 'woocommerce'),
+                                            'description' => __('Tax subtotal.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
@@ -602,35 +659,35 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                 ),
                             ),
                             'meta_data' => array(
-                                'description' => __('Meta data.', 'woocommerce'),
+                                'description' => __('Meta data.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'items' => array(
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Meta ID.', 'woocommerce'),
+                                            'description' => __('Meta ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'key' => array(
-                                            'description' => __('Meta key.', 'woocommerce'),
+                                            'description' => __('Meta key.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'value' => array(
-                                            'description' => __('Meta value.', 'woocommerce'),
+                                            'description' => __('Meta value.', 'woo-accounting-report'),
                                             'type' => 'mixed',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'display_key' => array(
-                                            'description' => __('Meta key for UI display.', 'woocommerce'),
+                                            'description' => __('Meta key for UI display.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'display_value' => array(
-                                            'description' => __('Meta value for UI display.', 'woocommerce'),
+                                            'description' => __('Meta value for UI display.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
@@ -638,13 +695,13 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                 ),
                             ),
                             'sku' => array(
-                                'description' => __('Product SKU.', 'woocommerce'),
+                                'description' => __('Product SKU.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'price' => array(
-                                'description' => __('Product price.', 'woocommerce'),
+                                'description' => __('Product price.', 'woo-accounting-report'),
                                 'type' => 'number',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
@@ -653,7 +710,7 @@ class RestRefundsController extends WC_REST_Orders_Controller
                     ),
                 ),
                 'tax_lines' => array(
-                    'description' => __('Tax lines data.', 'woocommerce'),
+                    'description' => __('Tax lines data.', 'woo-accounting-report'),
                     'type' => 'array',
                     'context' => array('view', 'edit'),
                     'readonly' => true,
@@ -661,67 +718,67 @@ class RestRefundsController extends WC_REST_Orders_Controller
                         'type' => 'object',
                         'properties' => array(
                             'id' => array(
-                                'description' => __('Item ID.', 'woocommerce'),
+                                'description' => __('Item ID.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'rate_code' => array(
-                                'description' => __('Tax rate code.', 'woocommerce'),
+                                'description' => __('Tax rate code.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'rate_id' => array(
-                                'description' => __('Tax rate ID.', 'woocommerce'),
+                                'description' => __('Tax rate ID.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'label' => array(
-                                'description' => __('Tax rate label.', 'woocommerce'),
+                                'description' => __('Tax rate label.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'compound' => array(
-                                'description' => __('Show if is a compound tax rate.', 'woocommerce'),
+                                'description' => __('Show if is a compound tax rate.', 'woo-accounting-report'),
                                 'type' => 'boolean',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'tax_total' => array(
-                                'description' => __('Tax total (not including shipping taxes).', 'woocommerce'),
+                                'description' => __('Tax total (not including shipping taxes).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'shipping_tax_total' => array(
-                                'description' => __('Shipping tax total.', 'woocommerce'),
+                                'description' => __('Shipping tax total.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'meta_data' => array(
-                                'description' => __('Meta data.', 'woocommerce'),
+                                'description' => __('Meta data.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'items' => array(
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Meta ID.', 'woocommerce'),
+                                            'description' => __('Meta ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'key' => array(
-                                            'description' => __('Meta key.', 'woocommerce'),
+                                            'description' => __('Meta key.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'value' => array(
-                                            'description' => __('Meta value.', 'woocommerce'),
+                                            'description' => __('Meta value.', 'woo-accounting-report'),
                                             'type' => 'mixed',
                                             'context' => array('view', 'edit'),
                                         ),
@@ -732,46 +789,46 @@ class RestRefundsController extends WC_REST_Orders_Controller
                     ),
                 ),
                 'shipping_lines' => array(
-                    'description' => __('Shipping lines data.', 'woocommerce'),
+                    'description' => __('Shipping lines data.', 'woo-accounting-report'),
                     'type' => 'array',
                     'context' => array('view', 'edit'),
                     'items' => array(
                         'type' => 'object',
                         'properties' => array(
                             'id' => array(
-                                'description' => __('Item ID.', 'woocommerce'),
+                                'description' => __('Item ID.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'method_title' => array(
-                                'description' => __('Shipping method name.', 'woocommerce'),
+                                'description' => __('Shipping method name.', 'woo-accounting-report'),
                                 'type' => 'mixed',
                                 'context' => array('view', 'edit'),
                             ),
                             'method_id' => array(
-                                'description' => __('Shipping method ID.', 'woocommerce'),
+                                'description' => __('Shipping method ID.', 'woo-accounting-report'),
                                 'type' => 'mixed',
                                 'context' => array('view', 'edit'),
                             ),
                             'instance_id' => array(
-                                'description' => __('Shipping instance ID.', 'woocommerce'),
+                                'description' => __('Shipping instance ID.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'total' => array(
-                                'description' => __('Line total (after discounts).', 'woocommerce'),
+                                'description' => __('Line total (after discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'total_tax' => array(
-                                'description' => __('Line total tax (after discounts).', 'woocommerce'),
+                                'description' => __('Line total tax (after discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'taxes' => array(
-                                'description' => __('Line taxes.', 'woocommerce'),
+                                'description' => __('Line taxes.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
@@ -779,13 +836,13 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Tax rate ID.', 'woocommerce'),
+                                            'description' => __('Tax rate ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'total' => array(
-                                            'description' => __('Tax total.', 'woocommerce'),
+                                            'description' => __('Tax total.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
@@ -794,25 +851,25 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                 ),
                             ),
                             'meta_data' => array(
-                                'description' => __('Meta data.', 'woocommerce'),
+                                'description' => __('Meta data.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'items' => array(
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Meta ID.', 'woocommerce'),
+                                            'description' => __('Meta ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'key' => array(
-                                            'description' => __('Meta key.', 'woocommerce'),
+                                            'description' => __('Meta key.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'value' => array(
-                                            'description' => __('Meta value.', 'woocommerce'),
+                                            'description' => __('Meta value.', 'woo-accounting-report'),
                                             'type' => 'mixed',
                                             'context' => array('view', 'edit'),
                                         ),
@@ -823,47 +880,47 @@ class RestRefundsController extends WC_REST_Orders_Controller
                     ),
                 ),
                 'fee_lines' => array(
-                    'description' => __('Fee lines data.', 'woocommerce'),
+                    'description' => __('Fee lines data.', 'woo-accounting-report'),
                     'type' => 'array',
                     'context' => array('view', 'edit'),
                     'items' => array(
                         'type' => 'object',
                         'properties' => array(
                             'id' => array(
-                                'description' => __('Item ID.', 'woocommerce'),
+                                'description' => __('Item ID.', 'woo-accounting-report'),
                                 'type' => 'integer',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'name' => array(
-                                'description' => __('Fee name.', 'woocommerce'),
+                                'description' => __('Fee name.', 'woo-accounting-report'),
                                 'type' => 'mixed',
                                 'context' => array('view', 'edit'),
                             ),
                             'tax_class' => array(
-                                'description' => __('Tax class of fee.', 'woocommerce'),
+                                'description' => __('Tax class of fee.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'tax_status' => array(
-                                'description' => __('Tax status of fee.', 'woocommerce'),
+                                'description' => __('Tax status of fee.', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'enum' => array('taxable', 'none'),
                             ),
                             'total' => array(
-                                'description' => __('Line total (after discounts).', 'woocommerce'),
+                                'description' => __('Line total (after discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                             ),
                             'total_tax' => array(
-                                'description' => __('Line total tax (after discounts).', 'woocommerce'),
+                                'description' => __('Line total tax (after discounts).', 'woo-accounting-report'),
                                 'type' => 'string',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
                             ),
                             'taxes' => array(
-                                'description' => __('Line taxes.', 'woocommerce'),
+                                'description' => __('Line taxes.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'readonly' => true,
@@ -871,19 +928,19 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Tax rate ID.', 'woocommerce'),
+                                            'description' => __('Tax rate ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'total' => array(
-                                            'description' => __('Tax total.', 'woocommerce'),
+                                            'description' => __('Tax total.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'subtotal' => array(
-                                            'description' => __('Tax subtotal.', 'woocommerce'),
+                                            'description' => __('Tax subtotal.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
@@ -892,25 +949,25 @@ class RestRefundsController extends WC_REST_Orders_Controller
                                 ),
                             ),
                             'meta_data' => array(
-                                'description' => __('Meta data.', 'woocommerce'),
+                                'description' => __('Meta data.', 'woo-accounting-report'),
                                 'type' => 'array',
                                 'context' => array('view', 'edit'),
                                 'items' => array(
                                     'type' => 'object',
                                     'properties' => array(
                                         'id' => array(
-                                            'description' => __('Meta ID.', 'woocommerce'),
+                                            'description' => __('Meta ID.', 'woo-accounting-report'),
                                             'type' => 'integer',
                                             'context' => array('view', 'edit'),
                                             'readonly' => true,
                                         ),
                                         'key' => array(
-                                            'description' => __('Meta key.', 'woocommerce'),
+                                            'description' => __('Meta key.', 'woo-accounting-report'),
                                             'type' => 'string',
                                             'context' => array('view', 'edit'),
                                         ),
                                         'value' => array(
-                                            'description' => __('Meta value.', 'woocommerce'),
+                                            'description' => __('Meta value.', 'woo-accounting-report'),
                                             'type' => 'mixed',
                                             'context' => array('view', 'edit'),
                                         ),
@@ -921,7 +978,7 @@ class RestRefundsController extends WC_REST_Orders_Controller
                     ),
                 ),
                 'api_refund' => array(
-                    'description' => __('When true, the payment gateway API is used to generate the refund.', 'woocommerce'),
+                    'description' => __('When true, the payment gateway API is used to generate the refund.', 'woo-accounting-report'),
                     'type' => 'boolean',
                     'context' => array('edit'),
                     'default' => true,
@@ -930,21 +987,21 @@ class RestRefundsController extends WC_REST_Orders_Controller
         );
 
         $schema['properties']['line_items']['items']['properties']['refund_total'] = array(
-            'description' => __('Amount that will be refunded for this line item (excluding taxes).', 'woocommerce'),
+            'description' => __('Amount that will be refunded for this line item (excluding taxes).', 'woo-accounting-report'),
             'type' => 'number',
             'context' => array('edit'),
             'readonly' => true,
         );
 
         $schema['properties']['line_items']['items']['properties']['taxes']['items']['properties']['refund_total'] = array(
-            'description' => __('Amount that will be refunded for this tax.', 'woocommerce'),
+            'description' => __('Amount that will be refunded for this tax.', 'woo-accounting-report'),
             'type' => 'number',
             'context' => array('edit'),
             'readonly' => true,
         );
 
         $schema['properties']['api_restock'] = array(
-            'description' => __('When true, refunded items are restocked.', 'woocommerce'),
+            'description' => __('When true, refunded items are restocked.', 'woo-accounting-report'),
             'type' => 'boolean',
             'context' => array('edit'),
             'default' => true,
@@ -963,6 +1020,25 @@ class RestRefundsController extends WC_REST_Orders_Controller
         $params = parent::get_collection_params();
 
         unset($params['status'], $params['customer'], $params['product']);
+
+        $params['date_created'] = array(
+            'description' => __('Only get refunds created at a specific Unix timestamp or timestamp range.', 'woo-accounting-report'),
+            'type' => 'string',
+            'sanitize_callback' => array($this, 'sanitize_date_range_param'),
+            'validate_callback' => array($this, 'validate_date_range_param'),
+        );
+        $params['date_completed'] = array(
+            'description' => __('Only get refunds completed at a specific Unix timestamp or timestamp range.', 'woo-accounting-report'),
+            'type' => 'string',
+            'sanitize_callback' => array($this, 'sanitize_date_range_param'),
+            'validate_callback' => array($this, 'validate_date_range_param'),
+        );
+        $params['date_paid'] = array(
+            'description' => __('Only get refunds paid at a specific Unix timestamp or timestamp range.', 'woo-accounting-report'),
+            'type' => 'string',
+            'sanitize_callback' => array($this, 'sanitize_date_range_param'),
+            'validate_callback' => array($this, 'validate_date_range_param'),
+        );
 
         return $params;
     }

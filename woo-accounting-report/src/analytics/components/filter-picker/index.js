@@ -300,7 +300,7 @@ class FilterPicker extends Component {
 					expandOnMobile
 					headerTitle={ __(
 						'filter report to show:',
-						'woocommerce'
+						'woo-accounting-report'
 					) }
 					renderToggle={ ( { isOpen, onToggle } ) => (
 						<DropdownButton

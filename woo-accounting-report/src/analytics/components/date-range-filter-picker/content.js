@@ -65,22 +65,22 @@ class DatePickerContent extends Component {
 		return (
 			<div>
 				<H className="screen-reader-text" tabIndex="0">
-					{ __( 'Select date range and comparison', 'woocommerce' ) }
+					{ __( 'Select date range and comparison', 'woo-accounting-report' ) }
 				</H>
 				<Section component={ false }>
 					<H className="woocommerce-filters-date__text">
-						{ __( 'select a date range', 'woocommerce' ) }
+						{ __( 'select a date range', 'woo-accounting-report' ) }
 					</H>
 					<TabPanel
 						tabs={ [
 							{
 								name: 'period',
-								title: __( 'Presets', 'woocommerce' ),
+								title: __( 'Presets', 'woo-accounting-report' ),
 								className: 'woocommerce-filters-date__tab',
 							},
 							{
 								name: 'custom',
-								title: __( 'Custom', 'woocommerce' ),
+								title: __( 'Custom', 'woo-accounting-report' ),
 								className: 'woocommerce-filters-date__tab',
 							},
 						] }
@@ -136,7 +136,7 @@ class DatePickerContent extends Component {
 													! ( after || before )
 												}
 											>
-												{ __( 'Reset', 'woocommerce' ) }
+												{ __( 'Reset', 'woo-accounting-report' ) }
 											</Button>
 										) }
 										{ isValidSelection( selected.name ) ? (
@@ -150,7 +150,7 @@ class DatePickerContent extends Component {
 											>
 												{ __(
 													'Update',
-													'woocommerce'
+													'woo-accounting-report'
 												) }
 											</Button>
 										) : (
@@ -161,7 +161,7 @@ class DatePickerContent extends Component {
 											>
 												{ __(
 													'Update',
-													'woocommerce'
+													'woo-accounting-report'
 												) }
 											</Button>
 										) }

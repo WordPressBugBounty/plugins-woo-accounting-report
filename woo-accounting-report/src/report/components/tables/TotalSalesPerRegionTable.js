@@ -1,4 +1,4 @@
-import { __ } from '@wordpress/i18n';
+import { __, sprintf } from '@wordpress/i18n';
 
 import {
     useEffect,
@@ -24,8 +24,6 @@ import { formatNumber } from '../format-number';
 import DownloadIcon from '../download-icon';
 import sortData from '../sort-data';
 import getMetaData from '../get-metadata';
-import { getSetting } from '@woocommerce/settings';
-import getWooSettings  from '../../hooks/wooCommerceOptions';
 
 export const TotalSalesPerRegionTable = ({ data, currency, dataIsLoaded }) => {
 
@@ -35,27 +33,11 @@ export const TotalSalesPerRegionTable = ({ data, currency, dataIsLoaded }) => {
     const [regionData, setRegionData] = useState([]);
 
     const [isLoading, setIsLoading] = useState(true);
-    const [storeCountry, setStoreCountry] = useState('');
-
     useEffect(() => {
-        const loader = async () => {
-            try {
-                const country = await getWooSettings('woocommerce_default_country');
-                setStoreCountry(country);
-                
-                if (data.isLoaded) {
-                    setRegionData(prepareSalesPerRegionData(data, country));
-                    setIsLoading(false);
-                } 
-
-            } catch (error) {
-                console.error('Error fetching settings:', error);
-                setRegionData([]);
-                setIsLoading(true);
-            }
-        };
-
-        loader();
+        if (data.isLoaded) {
+            setRegionData(prepareSalesPerRegionData(data));
+            setIsLoading(false);
+        }
     }, [data]);
 
     useEffect(() => {
@@ -76,9 +58,8 @@ export const TotalSalesPerRegionTable = ({ data, currency, dataIsLoaded }) => {
         downloadCSVFile(name, data);
     }
 
-    const prepareSalesPerRegionData = (data, country) => {
-        const { allCountries, orders, euCountries } = data;
-        const onlyLocal = getSetting('bjorntech_wcar_force_local') === 'yes';
+    const prepareSalesPerRegionData = (data) => {
+        const { orders, euCountries, storeCountryCode } = data;
         var salesPerRegion = [];
 
         orders.map(order => {
@@ -86,12 +67,14 @@ export const TotalSalesPerRegionTable = ({ data, currency, dataIsLoaded }) => {
             let region = 'global';
             let regionTitle = __('Global', 'woo-accounting-report');
             const euVATNumberValid = getMetaData(order, '_vat_number_is_valid')
-            console.log(country);
-            if (country !== '') {
-                if ((order.billing.country === '') || (order.billing.country === country) || onlyLocal) {
+
+            const billingCountry = order.effective_billing_country ?? order.billing?.country ?? '';
+
+            if (storeCountryCode !== '') {
+                if ((billingCountry === '') || (billingCountry === storeCountryCode)) {
                     region = 'local';
-                    regionTitle = __('Local', 'woo-accounting-report') + ' (' + country + ')';
-                } else if (euCountries.find(country => { return country.code === order.billing.country })) {
+                    regionTitle = __('Local', 'woo-accounting-report') + ' (' + storeCountryCode + ')';
+                } else if (euCountries.find(country => { return country.code === billingCountry })) {
                     if (euVATNumberValid) {
                         region = 'eu-vat-exempt';
                         regionTitle = __('EU VAT Exempt', 'woo-accounting-report');
@@ -177,7 +160,10 @@ export const TotalSalesPerRegionTable = ({ data, currency, dataIsLoaded }) => {
                 ]),
         };
 
-        let title = __(`Net sales per region in ${cardItem.currency}`, 'woo-accounting-report');
+        let title = sprintf(
+            __('Net sales per region in %s', 'woo-accounting-report'),
+            cardItem.currency
+        );
 
         totalCards.push(
             <TableCard
@@ -208,7 +194,7 @@ export const TotalSalesPerRegionTable = ({ data, currency, dataIsLoaded }) => {
 
     return <>
         {(totalCards?.length > 0 && totalCards) || <TableCard
-            title={__(`Net sales per region`, 'woo-accounting-report')}
+            title={__('Net sales per region', 'woo-accounting-report')}
             headers={headers}
             isLoading={isLoading}
             rowsPerPage={isLoading ? 1 : 25}

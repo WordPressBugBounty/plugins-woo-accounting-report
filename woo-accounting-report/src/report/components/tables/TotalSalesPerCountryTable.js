@@ -30,7 +30,7 @@ const prepareSalesPerCountryData = (data) => {
     const { allCountries, orders } = data;
 
     return orders.reduce((salesPerCountry, order) => {
-        const billingCountry = order.billing?.country ?? '??';
+        const billingCountry = order.effective_billing_country || order.billing?.country || '??';
         const orderCurrency = order.currency ?? '???';
 
         let orderTotal = Number(order.total ?? 0);

@@ -2,13 +2,13 @@
 /**
  * Provides functions for the plugin settings page in the WordPress admin.
  *
- * Settings can be accessed at WooCommerce -> Settings -> Accounting Hub.
+ * Settings can be accessed at WooCommerce -> Settings -> Accounting report.
  *
  * @package   WooCommerce_Accounting_Report
- * @author    BjornTech <info@bjorntech.se>
+ * @author    BjornTech <hello@bjorntech.com>
  * @license   GPL-3.0
- * @link      http://bjorntech.se
- * @copyright 2017-2018 BjornTech - BjornTech AB
+ * @link      http://bjorntech.com
+ * @copyright 2017-2026 BjornTech - BjornTech AB
  *
  * Text Domain:       woo-accounting-report
  */
@@ -17,12 +17,10 @@ namespace BjornTech\AccountingReport;
 
 defined('ABSPATH') || exit;
 
-use BjornTech\Common\SingletonTrait;
-
 class Settings
 {
 
-    use SingletonTrait;
+    use AccountingReportSingletonTrait;
     private static $handle = WC_ACCOUNTING_REPORT_HANDLE;
 
     /**
@@ -109,7 +107,7 @@ class Settings
             ];
 
             $settings[] = [
-                'title' => __('Base the report on status', 'woo-accounting-report'),
+                'title' => __('Base report on order date', 'woo-accounting-report'),
                 'css' => 'min-width:150px;',
                 'default' => 'date_completed',
                 'type' => 'select',
@@ -119,19 +117,8 @@ class Settings
                     'date_paid' => 'Paid',
                     'date_created' => 'Created',
                 ),
-                'desc' => __('Base the report on when a transaction was paid or when the order was created or when it was set to completed status.', 'woo-accounting-report'),
+                'desc' => __('Choose which order date is used when filtering report data.', 'woo-accounting-report'),
                 'id' => 'bjorntech_wcar_on_status',
-            ];
-
-            $settings[] = [
-                'title' => __('Tax Class for refunds', 'woo-accounting-report'),
-                'css' => 'min-width:150px;',
-                'default' => '',
-                'type' => 'select',
-                'class' => 'wc-enhanced-select',
-                'options' => wc_get_product_tax_class_options(),
-                'desc' => __('Choose Tax class to use for reverse calculation of tax on refunds without tax (only used in the report section).', 'woo-accounting-report'),
-                'id' => 'woo_ar_reverse_tax_class',
             ];
 
             $settings[] = [
@@ -140,26 +127,34 @@ class Settings
                 'class' => 'wc-enhanced-select',
                 'css' => 'width: 400px;',
                 'default' => 'wc-completed',
-                'desc' => __('Choose the order statuses that you would like to be included in the report.', 'woo-accounting-report'),
+                'desc' => __('Select which order statuses are included in report calculations.', 'woo-accounting-report'),
                 'options' => wc_get_order_statuses(),
                 'id' => 'bjorntech_wcar_include_order_statuses',
             ];
 
             $settings[] = [
-                'title' => __('Treat all sales as local', 'woo-accounting-report'),
+                'title' => __('Treat all sales as domestic', 'woo-accounting-report'),
                 'default' => '',
                 'type' => 'checkbox',
-                'desc' => __('Choose whether to treat all sales as local, regardless of country.', 'woo-accounting-report'),
+                'desc' => __('Classify all sales as domestic regardless of customer country.', 'woo-accounting-report'),
                 'id' => 'bjorntech_wcar_force_local',
+            ];
+
+            $settings[] = [
+                'title' => __('Present in local currency', 'woo-accounting-report'),
+                'default' => '',
+                'type' => 'checkbox',
+                'desc' => __('Convert all Analytics report values to store currency using exchange rates.', 'woo-accounting-report'),
+                'id' => 'bjorntech_wcar_present_local_currency',
             ];
 
             if (class_exists('Woo_Fortnox_Hub', false)) {
 
                 $settings[] = [
-                    'title' => __('Show Fortnox Invoice', 'woo-accounting-report'),
+                    'title' => __('Show Fortnox invoice number', 'woo-accounting-report'),
                     'default' => '',
                     'type' => 'checkbox',
-                    'desc' => __('Choose if the report should include the Fortnox Invoice number.', 'woo-accounting-report'),
+                    'desc' => __('Show the Fortnox invoice number in report output.', 'woo-accounting-report'),
                     'id' => 'bjorntech_wcar_fortnox_invoice',
                 ];
 
@@ -167,7 +162,7 @@ class Settings
 
             $settings[] = [
                 'title' => __('Thousand separator', 'woo-accounting-report'),
-                'desc' => __('This sets the thousand separator of prices.', 'woo-accounting-report'),
+                'desc' => __('Character used as the thousands separator in report amounts.', 'woo-accounting-report'),
                 'css' => 'width:50px;',
                 'default' => wc_get_price_thousand_separator(),
                 'type' => 'text',
@@ -176,7 +171,7 @@ class Settings
 
             $settings[] = [
                 'title' => __('Decimal separator', 'woo-accounting-report'),
-                'desc' => __('This sets the decimal separator of prices.', 'woo-accounting-report'),
+                'desc' => __('Character used as the decimal separator in report amounts.', 'woo-accounting-report'),
                 'css' => 'width:50px;',
                 'default' => wc_get_price_decimal_separator(),
                 'type' => 'text',
@@ -185,7 +180,7 @@ class Settings
 
             $settings[] = [
                 'title' => __('Number of decimals', 'woo-accounting-report'),
-                'desc' => __('Please select the number of decimal points that you would like to be displayed in the prices.', 'woo-accounting-report'),
+                'desc' => __('Number of decimals shown for report amounts.', 'woo-accounting-report'),
 
                 'css' => 'width:50px;',
                 'default' => '2',
@@ -198,26 +193,18 @@ class Settings
             ];
 
             $settings[] = [
-                'title' => __('Create a log file', 'woo-accounting-report'),
+                'title' => __('Enable debug logging', 'woo-accounting-report'),
                 'default' => '',
                 'type' => 'checkbox',
-                'description' => __('A log file can be very helpful in identifying and resolving problems.', 'woo-accounting-report'),
+                'desc' => __('Write debug information to WooCommerce logs to help troubleshooting.', 'woo-accounting-report'),
                 'id' => 'bjorntech_wcar_logging',
-            ];
-
-            $settings[] = [
-                'title' => __('Load Analytics report', 'woo-accounting-report'),
-                'default' => '',
-                'type' => 'checkbox',
-                'description' => __('(Eperimental) Enables the new analytics report', 'woo-accounting-report'),
-                'id' => 'bjorntech_wcar_load_analytics',
             ];
 
             $settings[] = [
                 'title' => __('Show OSS pane', 'woo-accounting-report'),
                 'default' => '',
                 'type' => 'checkbox',
-                'description' => __('(Eperimental) Enables the OSS pane in the new analytics report', 'woo-accounting-report'),
+                'desc' => __('(Experimental) Show the OSS pane in the Analytics report.', 'woo-accounting-report'),
                 'id' => 'bjorntech_wcar_show_oss_pane',
             ];
 
@@ -233,6 +220,13 @@ class Settings
                 'type' => 'title',
                 'desc' => '',
                 'id' => 'woo_accounting_report_advanced',
+            ];
+
+            $settings[] = [
+                'title' => __('Exchange rates API key', 'woo-accounting-report'),
+                'type' => 'password',
+                'desc' => __('Used server-side for exchange rate lookups (currency conversion and OSS calculations). You can also define BJORNTECH_ACCOUNTING_EXCHANGE_RATES_API_KEY in wp-config.php.', 'woo-accounting-report'),
+                'id' => 'bjorntech_wcar_exchange_rates_api_key',
             ];
 
             $settings[] = [
