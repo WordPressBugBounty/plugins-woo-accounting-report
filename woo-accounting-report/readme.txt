@@ -2,7 +2,7 @@
 Contributors: bjorntech
 Tags: accounting, report, woocommerce, vat, export
 Requires at least: 4.9
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
 Stable tag: 4.0.1
 License: GPL-3.0
